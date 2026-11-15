@@ -43,6 +43,9 @@ _REALTIME_QUOTE_UNSET = object()
 # === 标准化列名定义 ===
 STANDARD_COLUMNS = ['date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg']
 
+# Canonical multi-timeframe K-line identifiers shared by fetchers and manager.
+_KLINE_TIMEFRAMES = frozenset({"1d", "1w", "60m", "30m"})
+
 
 def unwrap_exception(exc: Exception) -> Exception:
     """
@@ -363,6 +366,9 @@ class BaseFetcher(ABC):
     name: str = "BaseFetcher"
     priority: int = 99  # 优先级数字越小越优先
     allow_empty_daily_data: bool = False
+    # Canonical multi-timeframe K-line identifiers. Fetchers advertise only the
+    # timeframes they can actually serve; the default implementation is daily.
+    SUPPORTED_TIMEFRAMES: frozenset = frozenset({"1d"})
     
     @abstractmethod
     def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
@@ -546,6 +552,29 @@ class BaseFetcher(ABC):
                 f"error_type={error_type}, elapsed={elapsed:.2f}s, reason={error_reason}"
             )
             raise DataFetchError(f"[{self.name}] {stock_code}: {error_reason}") from e
+
+    def get_kline_data(
+        self,
+        stock_code: str,
+        timeframe: str = "1d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        days: int = 365,
+    ) -> pd.DataFrame:
+        """Return multi-timeframe K-lines in the standard frame contract.
+
+        The base implementation only serves daily bars by delegating to
+        :meth:`get_daily_data`; fetchers with native intraday support override
+        this method and advertise the timeframes in ``SUPPORTED_TIMEFRAMES``.
+        """
+        if timeframe not in self.SUPPORTED_TIMEFRAMES:
+            raise DataFetchError(f"[{self.name}] 不支持的 timeframe: {timeframe!r}")
+        if timeframe != "1d":
+            raise DataFetchError(f"[{self.name}] 未实现 timeframe: {timeframe!r}")
+        df = self.get_daily_data(stock_code, start_date=start_date, end_date=end_date, days=days)
+        if df is None or df.empty:
+            return pd.DataFrame(columns=STANDARD_COLUMNS)
+        return df[STANDARD_COLUMNS].copy()
     
     def _clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -648,7 +677,7 @@ class DataFetcherManager:
         "BaostockFetcher": {"cn"},
         "YfinanceFetcher": {"cn", "hk", "us", "jp", "kr", "tw"},
         "LongbridgeFetcher": {"hk", "us"},
-        "FutuFetcher": {"hk"},
+        "FutuFetcher": {"hk", "us"},
         "FinnhubFetcher": {"us"},
         "AlphaVantageFetcher": {"us"},
     }
@@ -881,6 +910,52 @@ class DataFetcherManager:
     def reset_daily_source_health(cls) -> None:
         """Reset daily source health state for tests/admin diagnostics."""
         cls._daily_source_health.reset()
+
+    @classmethod
+    def _kline_health_key(cls, fetcher: BaseFetcher, market: str, timeframe: str) -> str:
+        # K-line availability is tracked per timeframe so an intraday-only
+        # failure cannot trip the daily circuit (and vice versa).
+        return f"kline_data:{market}:{timeframe}:{fetcher.name}"
+
+    @classmethod
+    def _is_kline_source_available(
+        cls,
+        fetcher: BaseFetcher,
+        market: str,
+        timeframe: str,
+    ) -> bool:
+        key = cls._kline_health_key(fetcher, market, timeframe)
+        if cls._daily_source_health.is_available(key):
+            return True
+        logger.info(
+            "[数据源健康度] %s %s K线跳过短期熔断的数据源: %s",
+            market,
+            timeframe,
+            fetcher.name,
+        )
+        return False
+
+    @classmethod
+    def _record_kline_source_success(
+        cls,
+        fetcher: BaseFetcher,
+        market: str,
+        timeframe: str,
+    ) -> None:
+        cls._daily_source_health.record_success(cls._kline_health_key(fetcher, market, timeframe))
+
+    @classmethod
+    def _record_kline_source_failure(
+        cls,
+        fetcher: BaseFetcher,
+        market: str,
+        timeframe: str,
+        error: str,
+    ) -> None:
+        cls._daily_source_health.record_failure(
+            cls._kline_health_key(fetcher, market, timeframe),
+            error=error,
+        )
 
     def _get_cached_stock_name(self, stock_code: str) -> Optional[str]:
         self._ensure_concurrency_guards()
@@ -1875,7 +1950,7 @@ class DataFetcherManager:
             logger.debug("[数据源初始化] 跳过未配置的 LongbridgeFetcher")
 
         if FutuFetcher.has_configured_endpoint():
-            optional_fetchers.append(FutuFetcher())  # 富途（港股，依赖 OpenD）
+            optional_fetchers.append(FutuFetcher())  # 富途 / moomoo（港股 + 美股，依赖 OpenD）
         else:
             logger.debug("[数据源初始化] 跳过未配置的 FutuFetcher")
 
@@ -2010,15 +2085,21 @@ class DataFetcherManager:
         if is_us:
             prefer_lb = self._longbridge_preferred(capability="daily_data") and not is_us_index
             if is_us_index:
-                # 指数始终 YFinance 首选（Longbridge 不提供指数K线）
+                # 指数始终 YFinance 首选（Longbridge / Futu 不提供指数K线）
                 source_order = ["YfinanceFetcher", "FinnhubFetcher"]
-            elif prefer_lb:
-                source_order = ["LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher"]
+                pin_first = True
             else:
-                source_order = ["FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher", "LongbridgeFetcher"]
+                if prefer_lb:
+                    base_order = ["LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher"]
+                else:
+                    base_order = ["FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher", "LongbridgeFetcher"]
+                # Futu/moomoo is first only when its OpenD endpoint is configured;
+                # otherwise the chain is identical to main.
+                futu_daily = self._get_fetcher_by_name("FutuFetcher", capability="daily_data") is not None
+                source_order = (["FutuFetcher"] + base_order) if futu_daily else base_order
+                pin_first = bool(prefer_lb or futu_daily)
             # 消费各数据源当前优先级(含 *_PRIORITY 环境变量):默认优先级与内置链路一致,
             # 单项调整(如 YFINANCE_PRIORITY=0)即时生效;指数/Longbridge preferred 的锚定首选不被普通优先级覆盖
-            pin_first = bool(is_us_index or prefer_lb)
             source_order = self._order_us_sources_by_priority(source_order, pin_first=pin_first)
             market_label = "美股指数" if is_us_index else "美股"
 
@@ -2196,6 +2277,161 @@ class DataFetcherManager:
         error_summary = f"所有数据源获取 {stock_code} 失败:\n" + "\n".join(errors)
         elapsed = time.time() - request_start
         logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
+        raise DataFetchError(error_summary)
+
+    def get_kline_data(
+        self,
+        stock_code: str,
+        timeframe: str = "1d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        days: int = 365,
+    ) -> Tuple[pd.DataFrame, str]:
+        """Fetch multi-timeframe K-lines with market/timeframe-aware failover."""
+        timeframe = timeframe or "1d"
+        if timeframe not in _KLINE_TIMEFRAMES:
+            raise DataFetchError(
+                f"不支持的 timeframe: {timeframe!r}（可选: {', '.join(sorted(_KLINE_TIMEFRAMES))}）"
+            )
+        raw_stock_code = (stock_code or "").strip()
+        if not raw_stock_code:
+            raise DataFetchError("股票代码不能为空")
+        stock_code = normalize_stock_code(raw_stock_code)
+        market = _market_tag(stock_code)
+        market_label = {
+            "us": "美股",
+            "hk": "港股",
+            "jp": "日股",
+            "kr": "韩股",
+            "tw": "台股",
+        }.get(market, "A股")
+
+        fetchers = self._filter_daily_fetchers_for_market(
+            self._get_fetchers_snapshot(), market
+        )
+        candidates: List[BaseFetcher] = []
+        errors: List[str] = []
+        for fetcher in fetchers:
+            supported = getattr(fetcher, "SUPPORTED_TIMEFRAMES", frozenset({"1d"}))
+            if timeframe not in supported:
+                logger.debug(
+                    "[数据源路由] %s %s K线跳过不支持的数据源: %s",
+                    market,
+                    timeframe,
+                    fetcher.name,
+                )
+                continue
+            if not self._is_fetcher_available(fetcher, capability="kline_data"):
+                continue
+            if not self._is_kline_source_available(fetcher, market, timeframe):
+                errors.append(f"[{fetcher.name}] (CircuitOpen) 数据源短期熔断")
+                continue
+            candidates.append(fetcher)
+
+        if not candidates:
+            detail = ("\n" + "\n".join(errors)) if errors else ""
+            raise DataFetchError(
+                f"{market_label} {stock_code} {timeframe} K线获取失败:\n暂无可用数据源{detail}"
+            )
+
+        total = len(candidates)
+        request_start = time.time()
+        for attempt, fetcher in enumerate(candidates, start=1):
+            fallback_to = candidates[attempt].name if attempt < total else None
+            attempt_start = time.time()
+            try:
+                logger.info(
+                    "[数据源尝试 %s/%s] [%s] 获取 %s %s K线...",
+                    attempt,
+                    total,
+                    fetcher.name,
+                    stock_code,
+                    timeframe,
+                )
+                record_provider_run_started(
+                    data_type="kline_data",
+                    provider=fetcher.name,
+                    operation="get_kline_data",
+                )
+                df = self._call_fetcher_method(
+                    fetcher,
+                    "get_kline_data",
+                    stock_code=stock_code,
+                    timeframe=timeframe,
+                    start_date=start_date,
+                    end_date=end_date,
+                    days=days,
+                )
+                duration_ms = int((time.time() - attempt_start) * 1000)
+                if df is not None and not df.empty:
+                    record_provider_run(
+                        data_type="kline_data",
+                        provider=fetcher.name,
+                        operation="get_kline_data",
+                        success=True,
+                        latency_ms=duration_ms,
+                        record_count=len(df),
+                    )
+                    self._record_kline_source_success(fetcher, market, timeframe)
+                    logger.info(
+                        "[数据源完成] %s %s K线使用 [%s] 获取成功: rows=%s, elapsed=%.2fs",
+                        stock_code,
+                        timeframe,
+                        fetcher.name,
+                        len(df),
+                        time.time() - request_start,
+                    )
+                    return df, fetcher.name
+
+                record_provider_run(
+                    data_type="kline_data",
+                    provider=fetcher.name,
+                    operation="get_kline_data",
+                    success=False,
+                    latency_ms=duration_ms,
+                    error_type="empty",
+                    error_message="empty result",
+                    fallback_to=fallback_to,
+                    record_count=0,
+                )
+                self._record_kline_source_success(fetcher, market, timeframe)
+                errors.append(f"[{fetcher.name}] 返回空数据")
+            except Exception as exc:
+                error_type, error_reason = summarize_exception(exc)
+                duration_ms = int((time.time() - attempt_start) * 1000)
+                record_provider_run(
+                    data_type="kline_data",
+                    provider=fetcher.name,
+                    operation="get_kline_data",
+                    success=False,
+                    latency_ms=duration_ms,
+                    error_type=error_type,
+                    error_message=error_reason,
+                    fallback_to=fallback_to,
+                )
+                logger.warning(
+                    "[数据源失败 %s/%s] [%s] %s %s K线: error_type=%s, reason=%s",
+                    attempt,
+                    total,
+                    fetcher.name,
+                    stock_code,
+                    timeframe,
+                    error_type,
+                    error_reason,
+                )
+                self._record_kline_source_failure(fetcher, market, timeframe, error_reason)
+                errors.append(f"[{fetcher.name}] ({error_type}) {error_reason}")
+
+        error_summary = (
+            f"所有数据源获取 {stock_code} {timeframe} K线失败:\n" + "\n".join(errors)
+        )
+        logger.error(
+            "[数据源终止] %s %s K线获取失败: elapsed=%.2fs\n%s",
+            stock_code,
+            timeframe,
+            time.time() - request_start,
+            error_summary,
+        )
         raise DataFetchError(error_summary)
     
     @property
@@ -2514,9 +2750,21 @@ class DataFetcherManager:
 
         if is_us or is_hk:
             prefer_lb = self._longbridge_preferred() and not is_us_index
+            # Futu/moomoo only participates when an OpenD endpoint is configured.
+            futu_enabled = False
+            try:
+                from data_provider.futu_fetcher import FutuFetcher
+                futu_enabled = FutuFetcher.has_configured_endpoint()
+            except Exception:  # noqa: BLE001 - fail closed: treat futu as disabled
+                futu_enabled = False
+            futu_us = bool(is_us and not is_us_index and futu_enabled)
             if is_us:
-                primary_src = "LongbridgeFetcher" if prefer_lb else "YfinanceFetcher"
-                secondary_src = "YfinanceFetcher" if prefer_lb else "LongbridgeFetcher"
+                if futu_us:
+                    primary_src = "FutuFetcher"
+                    secondary_src = "LongbridgeFetcher" if prefer_lb else "YfinanceFetcher"
+                else:
+                    primary_src = "LongbridgeFetcher" if prefer_lb else "YfinanceFetcher"
+                    secondary_src = "YfinanceFetcher" if prefer_lb else "LongbridgeFetcher"
                 market_label = "美股指数" if is_us_index else "美股"
                 primary_kw: dict = {}
                 secondary_kw: dict = {}
@@ -2545,12 +2793,6 @@ class DataFetcherManager:
                 # _try_fetcher_quote fail on it) avoids recording a never-enabled
                 # source as the failed primary, which would wrongly mark a
                 # successful quote from the next enabled source as fallback.
-                futu_enabled = False
-                try:
-                    from data_provider.futu_fetcher import FutuFetcher
-                    futu_enabled = FutuFetcher.has_configured_endpoint()
-                except Exception:  # noqa: BLE001 - fail closed: treat futu as disabled
-                    futu_enabled = False
                 for index, source in enumerate(hk_priority):
                     mapped = source_map.get(source)
                     if mapped is None:
@@ -2605,7 +2847,13 @@ class DataFetcherManager:
                     stock_code, primary_quote, secondary_src, **secondary_kw, **target_kwargs,
                 )
             if is_us and not is_us_index and primary_quote is not None:
-                for extra_src in ["FinnhubFetcher", "AlphaVantageFetcher"]:
+                extra_sources = ["FinnhubFetcher", "AlphaVantageFetcher"]
+                if futu_us:
+                    # Keep the other global source in the supplement chain when
+                    # Futu is primary, matching the pre-existing US depth.
+                    other = "YfinanceFetcher" if prefer_lb else "LongbridgeFetcher"
+                    extra_sources.insert(0, other)
+                for extra_src in extra_sources:
                     primary_quote = self._supplement_quote(
                         stock_code, primary_quote, extra_src, **target_kwargs,
                     )
@@ -3130,7 +3378,7 @@ class DataFetcherManager:
         # 3. 依次尝试各个数据源
         from .akshare_fetcher import _is_us_code
         is_us = _is_us_code(stock_code)
-        _US_CAPABLE_FETCHERS = {"YfinanceFetcher", "LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher"}
+        _US_CAPABLE_FETCHERS = {"YfinanceFetcher", "LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher", "FutuFetcher"}
         for fetcher in self._get_fetchers_snapshot():
             if not hasattr(fetcher, 'get_stock_name'):
                 continue

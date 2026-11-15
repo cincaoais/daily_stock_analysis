@@ -19,8 +19,8 @@ AkShare 的业绩预告、快报是按 `date=YYYYMMDD` 查询的全市场表，�
 - A 股个股 / ETF 行情：首选推荐 [TickPlus](http://www.tickplus.org/register?reg=5433cf922395)，配置 `TICKPLUS_API_KEY`；选股全市场快照仍可配 `TUSHARE_TOKEN`，保留免费源和其他商业源兜底。普通个股日线按 priority 配置排序。
 - 已登记 A 股指数：固定按 Tencent → AkShare → TickFlow → YFinance 降级，不读取普通日 K 的 `*_PRIORITY` 配置。
 - A 股大盘复盘：配置 `TICKFLOW_API_KEY` 后，复盘聚合所需的指数和市场宽度会优先尝试 TickFlow，失败后回退现有免费源；这与单标的指数日线的 Tencent-first 固定链是不同入口。
-- 港股：配置 `FUTU_OPEND_HOST` 后，Futu 可作为港股实时与基本面主源；`FUTU_HK_REALTIME_SOURCE_PRIORITY` 控制港股实时行情顺序，Longbridge、AkShare、YFinance 保留为 fallback；OpenD 未运行或 5 秒内未完成协议就绪时本次请求直接回退，并在 5 分钟内跳过 Futu，避免整轮分析阻塞。
-- 美股：配置 `LONGBRIDGE_*` 后可优先使用 Longbridge，YFinance 保留实时主链 fallback；Finnhub、AlphaVantage 只在已有主源报价后补充字段或参与日线链，不能在 Longbridge/YFinance 全部失败时独立返回实时报价。
+- 港股：配置 `FUTU_OPEND_HOST`（或等价的 `MOOMOO_OPEND_HOST`）后，Futu / moomoo OpenD 可作为港股实时、日线、多周期 K 线与基本面主源；`FUTU_HK_REALTIME_SOURCE_PRIORITY` 控制港股实时行情顺序，Longbridge、AkShare、YFinance 保留为 fallback；OpenD 未运行或 5 秒内未完成协议就绪时本次请求直接回退，并在 5 分钟内跳过 Futu，避免整轮分析阻塞。
+- 美股：配置 OpenD 端点后，Futu / moomoo 同时参与美股实时与日线，并优先于 Longbridge / YFinance；未配置端点时美股链路与主分支完全一致。美股指数始终走 YFinance，不使用 Futu。`get_kline_data` 支持 `1d`、`1w`、`60m`、`30m`：Futu 使用前复权（QFQ），YFinance 使用对应 interval 并按 Yahoo 盘中历史上限裁剪窗口。
 - 热点题材：选股的热点实现参考 AlphaSift，默认走 EastMoney provider，并使用本地 last-good cache 降低实时接口失败影响。
 
 ## 已接入数据源矩阵
@@ -34,8 +34,10 @@ AkShare 的业绩预告、快报是按 `date=YYYYMMDD` 查询的全市场表，�
 | 选股快照 | Tushare、Sina、Efinance、AkShare EM、EastMoney Datacenter | 有 `TUSHARE_TOKEN` 时自动把 `tushare` 放入快照优先级；否则使用免费源链路 | 选股引擎维护 source health；状态接口透出 snapshot/daily health |
 | 选股日线补特征 | `DataFetcherManager` | 选股引擎优先复用现有日线与缓存链路 | 现有链路失败后才回到引擎自身的日线源 |
 | 选股热点题材 | EastMoney provider、参考 AlphaSift 的 hotspot 实现、last-good cache | 未指定 provider 时默认使用 EastMoney provider | 实时失败时回退热点缓存；无缓存时返回稳定空态和可读错误 |
-| 港股 | Futu、Longbridge、YFinance、AkShare、Tushare | 配置 `FUTU_OPEND_HOST` 后 Futu 作为实时与基本面主源，按 `FUTU_HK_REALTIME_SOURCE_PRIORITY` 顺序尝试 | Futu 失败时回退 Longbridge / AkShare / YFinance；Longbridge 冷却或失败时继续回退 YFinance / 其他可用源 |
-| 美股 | Longbridge、YFinance、AkShare、Tushare、Finnhub、AlphaVantage、Stooq | 配置 Longbridge 凭证后参与美股日线/实时主链；YFinance 保持实时基础 fallback；Finnhub/AlphaVantage 可补充已有报价字段并参与日线链 | Longbridge 冷却或失败时实时主链回退 YFinance；两者都失败时不把补充源伪装成可独立返回报价的 fallback |
+| 港股 | Futu / moomoo、Longbridge、YFinance、AkShare、Tushare | 配置 `FUTU_OPEND_HOST` 或 `MOOMOO_OPEND_HOST` 后 Futu / moomoo 作为实时与基本面主源，按 `FUTU_HK_REALTIME_SOURCE_PRIORITY` 顺序尝试 | Futu 失败时回退 Longbridge / AkShare / YFinance；Longbridge 冷却或失败时继续回退 YFinance / 其他可用源 |
+| 美股 | Futu / moomoo（配置 OpenD 时）、Longbridge、YFinance、AkShare、Tushare、Finnhub、AlphaVantage、Stooq | 配置 OpenD 端点后 Futu / moomoo 优先参与美股日线与实时；否则沿用 Longbridge / YFinance 主链。美股指数固定使用 YFinance | Futu 失败时回退 Longbridge / YFinance / Finnhub / AlphaVantage；补充源不会伪装成可独立返回报价的 fallback |
+
+多周期 K 线统一由 `DataFetcherManager.get_kline_data()` 路由，支持 `1d`、`1w`、`60m`、`30m`。Futu / moomoo 的 K 线路径使用前复权（QFQ）并按 `page_req_key` 分页（最多 5 页）；原有日线路径仍保持 `AuType.NONE` 单页不变。YFinance 使用 `1d` / `1wk` / `60m` / `30m` interval，并按 Yahoo 的盘中历史上限裁剪请求窗口（30m 约 58 天、60m 约 728 天）。所有实现返回同一列契约、市场本地 tz-naive 时间、升序去重。
 
 ## 统一数据能力只读契约
 
@@ -67,7 +69,7 @@ flowchart TD
     DM -->|A 股个股/未登记标的| CN[按 priority 动态排序: TickPlus/Efinance/AkShare/Tushare/TickFlow/Pytdx/Baostock/YFinance/Tencent]
     DM -->|已登记沪深指数| CNI[Tencent -> AkShare -> TickFlow -> YFinance]
     DM -->|港股| HK[Futu if configured -> Longbridge/AkShare/YFinance fallback]
-    DM -->|美股| US[Longbridge/YFinance -> Finnhub/AlphaVantage -> Stooq]
+    DM -->|美股| US[Futu if configured -> Longbridge/YFinance -> Finnhub/AlphaVantage -> Stooq]
 
     R --> RP[REALTIME_SOURCE_PRIORITY]
     RP --> RS[Tencent -> AkShare Sina -> Efinance -> AkShare EM]

@@ -208,8 +208,9 @@ class FutuFundamentalAdapter:
 
     def _capital_flow(self, code: str, result: Dict[str, Any]) -> None:
         try:
-            import futu
-            period = futu.PeriodType.DAY
+            from .opend_sdk import load_opend_sdk
+
+            period = load_opend_sdk().PeriodType.DAY
         except Exception:
             period = "DAY"
         payload, error = self._ok_payload(
