@@ -975,6 +975,18 @@ def setup_env(override: bool = False):
         )
 
 
+def _parse_news_ticker_providers(value: Optional[str]) -> List[str]:
+    """Parse NEWS_TICKER_PROVIDERS; unset means the default chain, empty string disables it."""
+    if value is None:
+        return ["yahoo", "finnhub"]
+    names: List[str] = []
+    for item in value.split(","):
+        name = item.strip().lower()
+        if name in ("yahoo", "finnhub") and name not in names:
+            names.append(name)
+    return names
+
+
 @dataclass
 class Config:
     """
@@ -1113,6 +1125,8 @@ class Config:
     # === 新闻与分析筛选配置 ===
     news_max_age_days: int = 3   # 新闻最大时效（天）
     news_strategy_profile: str = "short"  # 新闻窗口策略档位：ultra_short/short/medium/long
+    # 按股票代码查新闻的数据源（顺序即优先级）：yahoo（免 Key）、finnhub（需 FINNHUB_API_KEY，免费版仅北美）
+    news_ticker_providers: List[str] = field(default_factory=lambda: ["yahoo", "finnhub"])
     news_intel_retention_days: int = 30  # 本地资讯池保留天数
     news_intel_fetch_timeout_sec: float = 8.0  # 单个资讯源拉取超时
     news_intel_max_items_per_source: int = 50  # 单次每个资讯源最多采集条数
@@ -2041,6 +2055,7 @@ class Config:
             news_strategy_profile=cls._parse_news_strategy_profile(
                 os.getenv('NEWS_STRATEGY_PROFILE', 'short')
             ),
+            news_ticker_providers=_parse_news_ticker_providers(os.getenv('NEWS_TICKER_PROVIDERS')),
             news_intel_retention_days=parse_env_int(
                 os.getenv('NEWS_INTEL_RETENTION_DAYS'),
                 30,

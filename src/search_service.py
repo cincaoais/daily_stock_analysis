@@ -2414,6 +2414,8 @@ class SearchService:
         searxng_timeout_seconds: Optional[int] = None,
         news_max_age_days: int = 3,
         news_strategy_profile: str = "short",
+        ticker_news_providers: Optional[List[str]] = None,
+        finnhub_api_key: Optional[str] = None,
     ):
         """
         初始化搜索服务
@@ -2429,6 +2431,8 @@ class SearchService:
             searxng_public_instances_enabled: 未配置自建实例时，是否自动使用公共 SearXNG 实例
             news_max_age_days: 新闻最大时效（天）
             news_strategy_profile: 新闻窗口策略档位（ultra_short/short/medium/long）
+            ticker_news_providers: 按股票代码查新闻的数据源（yahoo / finnhub），优先于关键词搜索
+            finnhub_api_key: Finnhub Key（finnhub 新闻源需要；免费版仅覆盖北美公司）
         """
         self._constructor_kwargs: Dict[str, Any] = {
             "bocha_keys": list(bocha_keys or []),
@@ -2442,8 +2446,22 @@ class SearchService:
             "searxng_timeout_seconds": searxng_timeout_seconds,
             "news_max_age_days": int(news_max_age_days),
             "news_strategy_profile": news_strategy_profile,
+            "ticker_news_providers": list(ticker_news_providers or []),
+            "finnhub_api_key": finnhub_api_key,
         }
         self._providers: List[BaseSearchProvider] = []
+        self._ticker_providers: List[BaseSearchProvider] = []
+        if ticker_news_providers:
+            from src.news_providers import build_ticker_news_providers
+
+            self._ticker_providers = build_ticker_news_providers(
+                ticker_news_providers, finnhub_api_key=finnhub_api_key
+            )
+            if self._ticker_providers:
+                logger.info(
+                    "已启用按代码新闻源: %s",
+                    ", ".join(provider.name for provider in self._ticker_providers),
+                )
         self.news_max_age_days = max(1, news_max_age_days)
         raw_profile = (news_strategy_profile or "short").strip().lower()
         self.news_strategy_profile = normalize_news_strategy_profile(news_strategy_profile)
@@ -2692,8 +2710,71 @@ class SearchService:
 
     @property
     def is_available(self) -> bool:
-        """检查是否有可用的搜索引擎"""
+        """检查是否有可用的搜索引擎（含按代码新闻源）"""
+        return any(p.is_available for p in self._providers) or any(
+            p.is_available for p in self._ticker_providers
+        )
+
+    @property
+    def has_keyword_search(self) -> bool:
+        """Whether any free-text web search provider is configured."""
         return any(p.is_available for p in self._providers)
+
+    def _search_ticker_news(
+        self,
+        stock_code: str,
+        stock_name: str,
+        *,
+        max_results: int,
+        search_days: int,
+        operation: str,
+    ) -> Optional[SearchResponse]:
+        """Try ticker-keyed providers in order; return the first admitted, non-empty response."""
+        if not stock_code or not self._ticker_providers:
+            return None
+        provider_max_results = self._provider_request_size(max_results)
+        prefer_chinese = self._should_prefer_chinese_news(stock_code, stock_name)
+        for provider in self._ticker_providers:
+            if not provider.is_available:
+                continue
+            started_at = time.monotonic()
+            record_provider_run_started(data_type="news_search", provider=provider.name, operation=operation)
+            response = provider._execute_search(
+                f"{stock_name or stock_code} {stock_code} news",
+                max_results=provider_max_results,
+                days=search_days,
+                stock_code=stock_code,
+            )
+            scope = f"{stock_code}:{provider.name}:{operation}"
+            filtered = self._filter_news_response(
+                response, search_days=search_days, max_results=provider_max_results, log_scope=scope
+            )
+            ranked = self._rank_news_response(
+                filtered,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                prefer_chinese=prefer_chinese,
+                max_results=provider_max_results,
+                log_scope=scope,
+            )
+            admitted = self._limit_search_response(
+                self._filter_ranked_news_for_context(ranked, log_scope=scope),
+                max_results=max_results,
+            )
+            count = len(admitted.results or []) if admitted.success else 0
+            self._record_news_search_run(
+                provider=provider.name,
+                operation=operation,
+                success=bool(count),
+                latency_ms=self._elapsed_ms(started_at),
+                record_count=count,
+                error_type=None if count else "NoUsableNews",
+                error_message=None if count else (response.error_message or "过滤后无有效新闻"),
+            )
+            if count:
+                logger.info("[%s] %s 按代码新闻命中 %s 条", provider.name, stock_code, count)
+                return admitted
+        return None
 
     def _cache_key(self, query: str, max_results: int, days: int) -> str:
         """Build a cache key from query parameters."""
@@ -4129,6 +4210,18 @@ class SearchService:
             return cached
 
         try:
+            if not focus_keywords and stock_code:
+                ticker_response = self._search_ticker_news(
+                    stock_code,
+                    stock_name,
+                    max_results=max_results,
+                    search_days=search_days,
+                    operation="search_stock_news",
+                )
+                if ticker_response is not None:
+                    self._put_cache(cache_key, ticker_response)
+                    return ticker_response
+
             # 依次尝试各个搜索引擎（若过滤后为空，继续尝试下一引擎）
             had_provider_success = False
             best_ranked_response: Optional[SearchResponse] = None
@@ -4543,9 +4636,22 @@ class SearchService:
         # 轮流使用不同的搜索引擎
         provider_index = 0
         
+        ticker_latest = self._search_ticker_news(
+            stock_code,
+            stock_name,
+            max_results=target_per_dimension,
+            search_days=search_days,
+            operation="search_comprehensive_intel",
+        )
+        if ticker_latest is not None:
+            results['latest_news'] = ticker_latest
+            search_count += 1
+
         for dim in search_dimensions:
             if search_count >= max_searches:
                 break
+            if dim['name'] in results:
+                continue
             
             # 选择搜索引擎（轮流使用）
             available_providers = [p for p in self._providers if p.is_available]
@@ -4927,6 +5033,8 @@ def get_search_service() -> SearchService:
                     searxng_timeout_seconds=getattr(config, "searxng_timeout_seconds", None),
                     news_max_age_days=config.news_max_age_days,
                     news_strategy_profile=getattr(config, "news_strategy_profile", "short"),
+                    ticker_news_providers=list(getattr(config, "news_ticker_providers", None) or []),
+                    finnhub_api_key=getattr(config, "finnhub_api_key", None),
                 )
     
     return _search_service

@@ -312,6 +312,8 @@ class StockAnalysisPipeline:
                 searxng_timeout_seconds=getattr(self.config, "searxng_timeout_seconds", None),
                 news_max_age_days=self.config.news_max_age_days,
                 news_strategy_profile=getattr(self.config, "news_strategy_profile", "short"),
+                ticker_news_providers=list(getattr(self.config, "news_ticker_providers", None) or []),
+                finnhub_api_key=getattr(self.config, "finnhub_api_key", None),
             )
         except Exception as exc:
             logger.warning("搜索服务初始化失败，将以无搜索模式运行: %s", exc, exc_info=True)
