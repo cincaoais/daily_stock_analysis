@@ -160,7 +160,6 @@ Zeabur 服务建议从 `1G` 内存起步；`512M` 仅适合轻量 Web/API、单�
 | `SERPAPI_API_KEYS` | SerpAPI 密钥（推荐） |
 | `ANSPIRE_API_KEYS` | [Anspire](https://open.anspire.cn/dsa?share_code=QFBC0FYC) API Key（可选，模型与搜索共用；可用性以账号权限为准） |
 | `TAVILY_API_KEYS` | Tavily API 密钥（用逗号分隔） |
-| `BOCHA_API_KEYS` | Bocha API 密钥（用逗号分隔） |
 | `BRAVE_API_KEYS` | Brave Search API 密钥（用逗号分隔） |
 | `MINIMAX_API_KEYS` | MiniMax API 密钥（用逗号分隔） |
 | `SEARXNG_BASE_URLS` | SearXNG 实例地址（逗号分隔，无配额兜底，需在 settings.yml 启用 format: json）；留空时仅在显式启用公共实例发现后使用 `searx.space` |

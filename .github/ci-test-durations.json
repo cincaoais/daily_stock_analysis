@@ -47,7 +47,7 @@
     "tests/test_analysis_integration.py": 0.115,
     "tests/test_analysis_metadata.py": 0.026,
     "tests/test_analyzer_news_prompt.py": 0.077,
-    "tests/test_anspire_search.py": 0.03,
+    "tests/test_anspire_api_keys.py": 0.03,
     "tests/test_api_app_cors.py": 0.015,
     "tests/test_api_error_helpers.py": 0.01,
     "tests/test_api_health.py": 0.305,

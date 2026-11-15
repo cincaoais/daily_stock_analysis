@@ -1300,7 +1300,7 @@ class ScreeningOpportunitiesApiTestCase(unittest.TestCase):
         self.assertFalse(refreshed.get("cache_used", False))
 
     def test_hotspot_detail_adds_real_search_event_when_configured(self) -> None:
-        config = Config(screening_enabled=True, bocha_api_keys=["test-key"])
+        config = Config(screening_enabled=True, tavily_api_keys=["test-key"])
         provider = screening_service.DsaEastMoneyHotspotProvider()
         provider.hotspot_detail = MagicMock(return_value={
             "topic": "钼",
@@ -1385,7 +1385,7 @@ class ScreeningOpportunitiesApiTestCase(unittest.TestCase):
         )
 
     def test_hotspot_search_excludes_missing_and_unsafe_links(self) -> None:
-        config = Config(screening_enabled=True, bocha_api_keys=["test-key"])
+        config = Config(screening_enabled=True, tavily_api_keys=["test-key"])
         provider = screening_service.DsaEastMoneyHotspotProvider()
         provider.hotspot_detail = MagicMock(return_value={
             "topic": "钼",
@@ -1481,7 +1481,7 @@ class ScreeningOpportunitiesApiTestCase(unittest.TestCase):
         self.assertEqual(result.routes[0]["url"], "https://example.com/valid-news")
 
     def test_hotspot_search_does_not_pollute_or_refresh_shared_detail_cache(self) -> None:
-        config = Config(screening_enabled=True, bocha_api_keys=["test-key"])
+        config = Config(screening_enabled=True, tavily_api_keys=["test-key"])
         provider = screening_service.DsaEastMoneyHotspotProvider()
         provider.hotspot_detail = MagicMock(return_value={
             "topic": "钼",

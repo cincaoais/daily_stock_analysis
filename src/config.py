@@ -1108,8 +1108,7 @@ class Config:
     vision_provider_priority: str = "gemini,anthropic,openai"
 
     # === 搜索引擎配置（支持多 Key 负载均衡）===
-    anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Search API Keys
-    bocha_api_keys: List[str] = field(default_factory=list)  # Bocha API Keys
+    anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Open keys (legacy Anspire LLM gateway)
     minimax_api_keys: List[str] = field(default_factory=list)  # MiniMax API Keys
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
     brave_api_keys: List[str] = field(default_factory=list)  # Brave Search API Keys
@@ -1634,7 +1633,7 @@ class Config:
             if _single_deepseek:
                 deepseek_api_keys = [_single_deepseek]
 
-        # Anspire Open shares the same key as Anspire Search and exposes an
+        # Anspire Open keys (formerly also used for Anspire Search) expose an
         # OpenAI-compatible LLM gateway.  When no other OpenAI-compatible key is
         # configured, use ANSPIRE_API_KEYS as the legacy openai-compatible
         # provider so "one key" setups work without LLM_CHANNELS.
@@ -1830,8 +1829,6 @@ class Config:
         )
 
         # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
-        bocha_keys_str = os.getenv('BOCHA_API_KEYS', '')
-        bocha_api_keys = [k.strip() for k in bocha_keys_str.split(',') if k.strip()]
 
         minimax_keys_str = os.getenv('MINIMAX_API_KEYS', '')
         minimax_api_keys = [k.strip() for k in minimax_keys_str.split(',') if k.strip()]
@@ -2039,7 +2036,6 @@ class Config:
             ),
             vision_provider_priority=os.getenv('VISION_PROVIDER_PRIORITY', 'gemini,anthropic,openai'),
             anspire_api_keys=anspire_api_keys,
-            bocha_api_keys=bocha_api_keys,
             minimax_api_keys=minimax_api_keys,
             tavily_api_keys=tavily_api_keys,
             brave_api_keys=brave_api_keys,
@@ -3216,9 +3212,7 @@ class Config:
     def has_search_capability_enabled(self) -> bool:
         """Whether any search provider is configured or SearXNG fallback is enabled."""
         return bool(
-            self.anspire_api_keys
-            or self.bocha_api_keys
-            or self.minimax_api_keys
+            self.minimax_api_keys
             or self.tavily_api_keys
             or self.brave_api_keys
             or self.serpapi_keys
@@ -3648,8 +3642,8 @@ class Config:
         if not self.has_search_capability_enabled():
             issues.append(ConfigIssue(
                 severity="info",
-                message="未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用",
-                field="BOCHA_API_KEYS",
+                message="未配置关键词搜索引擎 (Tavily/Brave/SerpAPI/MiniMax/SearXNG)，风险、业绩、行业等情报维度将不可用；个股最新新闻仍可由 NEWS_TICKER_PROVIDERS 提供",
+                field="TAVILY_API_KEYS",
             ))
 
         # --- Notification channels ---

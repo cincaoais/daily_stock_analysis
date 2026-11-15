@@ -61,7 +61,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         response: SearchResponse | None = None,
     ):
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=news_max_age_days,
             news_strategy_profile=news_strategy_profile,
@@ -160,7 +160,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         fresh = today.isoformat()
 
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -189,7 +189,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         old = (today - timedelta(days=90)).isoformat()
         fresh = today.isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -231,7 +231,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Chinese-preferred queries should not stop on English-only provider results."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -265,7 +265,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Chinese items should be ordered ahead of English items in mixed batches."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -296,7 +296,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Chinese candidates beyond the first raw slot should still win after reprioritization."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -330,7 +330,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Chinese direct hits should outrank higher-scored English direct hits before limiting."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -368,7 +368,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """When no direct hit exists, Chinese-preferred flows should compare language before score."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -418,7 +418,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """English stock searches should keep the first successful provider result."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -445,7 +445,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """A-share direct company hits should beat generic sector news from earlier providers."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -497,7 +497,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Download/listing pages and zero-relevance fillers should not enter stock news context."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -1475,7 +1475,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Chinese-preferred queries should keep looking past English-only direct hits."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -1524,7 +1524,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """HK stock matching should drop similar-name noise when exact hits exist."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -1577,7 +1577,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """US ticker hits should outrank ambiguous common-word company-name noise."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -1701,7 +1701,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Bare one-letter US tickers should not make ordinary words direct hits."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -1749,7 +1749,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Bare alphabetic tickers should not turn ordinary words into direct hits."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -1797,7 +1797,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         """Ambiguous title-only names plus broad event words should not count as direct hits."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -2271,7 +2271,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
     def test_search_stock_news_query_uses_english_alias_for_chinese_display_name(self) -> None:
         """massif-01 blocker 1: foreign query path must use canonical English alias, not Chinese name."""
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -2321,7 +2321,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
     def test_search_stock_events_query_uses_english_alias_for_chinese_display_name(self) -> None:
         """search_stock_events foreign branch must use canonical English alias."""
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -2344,7 +2344,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
 
     def test_search_stock_events_reuses_search_cache(self) -> None:
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
         )
         provider = SimpleNamespace(

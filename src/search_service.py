@@ -6,7 +6,7 @@ A股自选股智能分析系统 - 搜索服务模块
 
 职责：
 1. 提供统一的新闻搜索接口
-2. 支持 Bocha、Tavily、Brave、SerpAPI、SearXNG 多种搜索引擎
+2. 支持 Tavily、Brave、SerpAPI、MiniMax、SearXNG 多种搜索引擎，以及 Yahoo Finance / Finnhub 按代码新闻源
 3. 多 Key 负载均衡和故障转移
 4. 搜索结果缓存和格式化
 """
@@ -1006,392 +1006,6 @@ class SerpAPISearchProvider(BaseSearchProvider):
             return f"{snippet}\n\n【网页详情】\n{preview}"
 
         return f"【网页详情】\n{preview}"
-
-
-class BochaSearchProvider(BaseSearchProvider):
-    """
-    博查搜索引擎
-    
-    特点：
-    - 专为AI优化的中文搜索API
-    - 结果准确、摘要完整
-    - 支持时间范围过滤和AI摘要
-    - 兼容Bing Search API格式
-    
-    文档：https://bocha-ai.feishu.cn/wiki/RXEOw02rFiwzGSkd9mUcqoeAnNK
-    """
-    
-    def __init__(self, api_keys: List[str]):
-        super().__init__(api_keys, "Bocha")
-    
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
-        """执行博查搜索"""
-        try:
-            import requests
-        except ImportError:
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message="requests 未安装，请运行: pip install requests"
-            )
-        
-        try:
-            # API 端点
-            url = "https://api.bocha.cn/v1/web-search"
-            
-            # 请求头
-            headers = {
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            }
-            
-            # 确定时间范围
-            freshness = "oneWeek"
-            if days <= 1:
-                freshness = "oneDay"
-            elif days <= 7:
-                freshness = "oneWeek"
-            elif days <= 30:
-                freshness = "oneMonth"
-            else:
-                freshness = "oneYear"
-
-            # 请求参数（严格按照API文档）
-            payload = {
-                "query": query,
-                "freshness": freshness,  # 动态时间范围
-                "summary": True,  # 启用AI摘要
-                "count": min(max_results, 50)  # 最大50条
-            }
-            
-            # 执行搜索（带瞬时 SSL/网络错误重试）
-            response = _post_with_retry(url, headers=headers, json=payload, timeout=10)
-            
-            # 检查HTTP状态码
-            if response.status_code != 200:
-                # 尝试解析错误信息
-                try:
-                    if response.headers.get('content-type', '').startswith('application/json'):
-                        error_data = response.json()
-                        error_message = error_data.get('message', response.text)
-                    else:
-                        error_message = response.text
-                except Exception:
-                    error_message = response.text
-                
-                # 根据错误码处理
-                if response.status_code == 403:
-                    error_msg = f"余额不足: {error_message}"
-                elif response.status_code == 401:
-                    error_msg = f"API KEY无效: {error_message}"
-                elif response.status_code == 400:
-                    error_msg = f"请求参数错误: {error_message}"
-                elif response.status_code == 429:
-                    error_msg = f"请求频率达到限制: {error_message}"
-                else:
-                    error_msg = f"HTTP {response.status_code}: {error_message}"
-                
-                logger.warning(f"[Bocha] 搜索失败: {error_msg}")
-                
-                return SearchResponse(
-                    query=query,
-                    results=[],
-                    provider=self.name,
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            # 解析响应
-            try:
-                data = response.json()
-            except ValueError as e:
-                error_msg = f"响应JSON解析失败: {str(e)}"
-                logger.error(f"[Bocha] {error_msg}")
-                return SearchResponse(
-                    query=query,
-                    results=[],
-                    provider=self.name,
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            # 检查响应code
-            if data.get('code') != 200:
-                error_msg = data.get('msg') or f"API返回错误码: {data.get('code')}"
-                return SearchResponse(
-                    query=query,
-                    results=[],
-                    provider=self.name,
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            # 记录原始响应到日志
-            logger.info(f"[Bocha] 搜索完成，query='{query}'")
-            logger.debug(f"[Bocha] 原始响应: {data}")
-            
-            # 解析搜索结果
-            results = []
-            web_pages = data.get('data', {}).get('webPages', {})
-            value_list = web_pages.get('value', [])
-            
-            for item in value_list[:max_results]:
-                # 优先使用summary（AI摘要），fallback到snippet
-                snippet = item.get('summary') or item.get('snippet', '')
-                
-                # 截取摘要长度
-                if snippet:
-                    snippet = snippet[:500]
-                
-                results.append(SearchResult(
-                    title=item.get('name', ''),
-                    snippet=snippet,
-                    url=item.get('url', ''),
-                    source=item.get('siteName') or self._extract_domain(item.get('url', '')),
-                    published_date=item.get('datePublished'),  # UTC+8格式，无需转换
-                ))
-            
-            logger.info(f"[Bocha] 成功解析 {len(results)} 条结果")
-            
-            return SearchResponse(
-                query=query,
-                results=results,
-                provider=self.name,
-                success=True,
-            )
-            
-        except requests.exceptions.Timeout:
-            error_msg = "请求超时"
-            logger.error(f"[Bocha] {error_msg}")
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message=error_msg
-            )
-        except requests.exceptions.RequestException as e:
-            error_msg = f"网络请求失败: {str(e)}"
-            logger.error(f"[Bocha] {error_msg}")
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message=error_msg
-            )
-        except Exception as e:
-            error_msg = f"未知错误: {str(e)}"
-            logger.error(f"[Bocha] {error_msg}")
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message=error_msg
-            )
-    
-    @staticmethod
-    def _extract_domain(url: str) -> str:
-        """从 URL 提取域名作为来源"""
-        try:
-            from urllib.parse import urlparse
-            parsed = urlparse(url)
-            domain = parsed.netloc.replace('www.', '')
-            return domain or '未知来源'
-        except Exception:
-            return '未知来源'
-
-
-class AnspireSearchProvider(BaseSearchProvider):
-    """
-    Anspire Search 搜索引擎
-    
-    特点：
-    - 面向AI生态的下一代实时智能搜索引擎
-    - 结果精准、响应快速
-    - 适用于股票新闻和市场情报搜索
-    
-    文档: https://open.anspire.cn/document/docs/searchApi/
-    """
-    
-    def __init__(self, api_keys: List[str]):
-        super().__init__(api_keys, "Anspire")
-    
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7, region_mode: int = 2) -> SearchResponse:
-        """执行 Anspire 搜索"""
-        try:
-            import requests
-        except ImportError:
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message="requests 未安装，请运行：pip install requests"
-            )
-        
-        try:
-            # API 端点
-            url = "https://plugin.anspire.cn/api/ntsearch/search"
-            
-            # 请求头
-            headers = {
-                'Authorization': f'Bearer {api_key}'
-            }
-
-            # 请求参数
-            payload = {
-                "query": query,
-                "top_k": min(max_results,50), 
-                "FromTime": (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S"),
-                "ToTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "region_mode": region_mode
-            }
-            
-            # 执行搜索
-            response = _get_with_retry(url, headers=headers, params=payload, timeout=10)
-            
-            # 检查 HTTP 状态码
-            if response.status_code != 200:
-                # 尝试解析错误信息
-                try:
-                    if response.headers.get('content-type', '').startswith('application/json'):
-                        error_data = response.json()
-                        error_message = error_data.get('message', response.text)
-                    else:
-                        error_message = response.text
-                except Exception:
-                    error_message = response.text
-                
-                # 根据错误码处理
-                if response.status_code == 403:
-                    error_msg = f"余额不足或权限不足：{error_message}"
-                elif response.status_code == 401:
-                    error_msg = f"API KEY 无效：{error_message}"
-                elif response.status_code == 400:
-                    error_msg = f"请求参数错误：{error_message}"
-                else:
-                    error_msg = f"HTTP {response.status_code}: {error_message}"
-                
-                logger.warning(f"[Anspire] 搜索失败：{error_msg}")
-                
-                return SearchResponse(
-                    query=query,
-                    results=[],
-                    provider=self.name,
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            # 解析响应
-            try:
-                data = response.json()
-            except ValueError as e:
-                error_msg = f"响应 JSON 解析失败：{str(e)}"
-                logger.error(f"[Anspire] {error_msg}")
-                return SearchResponse(
-                    query=query,
-                    results=[],
-                    provider=self.name,
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            if 'code' in data and data.get('code') != 200:
-                error_msg = data.get('msg') or f"API 返回错误码：{data.get('code')}"
-                logger.warning(f"[Anspire] 搜索失败：{error_msg}")
-                return SearchResponse(
-                    query=query,
-                    results=[],
-                    provider=self.name,
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            if 'results' not in data:
-                error_msg = "响应中缺少 results 字段"
-                logger.error(f"[Anspire] {error_msg}，原始响应：{data}")
-                return SearchResponse(
-                    query=query,
-                    results=[],
-                    provider=self.name,
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            # 记录原始响应到日志
-            logger.info(f"[Anspire] 搜索完成，query='{query}'")
-            logger.debug(f"[Anspire] 原始响应：{data}")
-            
-            results = []
-            value_list = data.get('results', [])
-            
-            for item in value_list[:max_results]:
-                snippet = item.get('content')
-                if snippet and isinstance(snippet, str) and len(snippet) > 500:
-                    snippet = snippet[:500] + "..."
-                
-                results.append(SearchResult(
-                    title=item.get('title', ''),
-                    snippet=snippet,
-                    url=item.get('url', ''),
-                    source=self._extract_domain(item.get('url', '')),
-                    published_date=item.get('date', '')
-                ))
-            
-            logger.info(f"[Anspire] 成功解析 {len(results)} 条结果")
-            
-            return SearchResponse(
-                query=query,
-                results=results,
-                provider=self.name,
-                success=True,
-            )
-            
-        except requests.exceptions.Timeout:
-            error_msg = "请求超时"
-            logger.error(f"[Anspire] {error_msg}")
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message=error_msg
-            )
-        except requests.exceptions.RequestException as e:
-            error_msg = f"网络请求失败：{str(e)}"
-            logger.error(f"[Anspire] {error_msg}")
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message=error_msg
-            )
-        except Exception as e:
-            error_msg = f"未知错误：{str(e)}"
-            logger.error(f"[Anspire] {error_msg}")
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message=error_msg
-            )
-    
-    @staticmethod
-    def _extract_domain(url: str) -> str:
-        """从 URL 提取域名作为来源"""
-        try:
-            from urllib.parse import urlparse
-            parsed = urlparse(url)
-            domain = parsed.netloc.replace('www.', '')
-            return domain or '未知来源'
-        except Exception:
-            return '未知来源'
 
 
 class MiniMaxSearchProvider(BaseSearchProvider):
@@ -2403,9 +2017,7 @@ class SearchService:
 
     def __init__(
         self,
-        bocha_keys: Optional[List[str]] = None,
         tavily_keys: Optional[List[str]] = None,
-        anspire_keys: Optional[List[str]] = None,
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
@@ -2421,9 +2033,7 @@ class SearchService:
         初始化搜索服务
 
         Args:
-            bocha_keys: 博查搜索 API Key 列表
             tavily_keys: Tavily API Key 列表
-            anspire_keys: Anspire Search API Key 列表
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
             minimax_keys: MiniMax API Key 列表
@@ -2435,9 +2045,7 @@ class SearchService:
             finnhub_api_key: Finnhub Key（finnhub 新闻源需要；免费版仅覆盖北美公司）
         """
         self._constructor_kwargs: Dict[str, Any] = {
-            "bocha_keys": list(bocha_keys or []),
             "tavily_keys": list(tavily_keys or []),
-            "anspire_keys": list(anspire_keys or []),
             "brave_keys": list(brave_keys or []),
             "serpapi_keys": list(serpapi_keys or []),
             "minimax_keys": list(minimax_keys or []),
@@ -2480,11 +2088,6 @@ class SearchService:
         )
 
         # 初始化搜索引擎（按优先级排序）
-        # 1. Bocha 优先（中文搜索优化，AI摘要）
-        if bocha_keys:
-            self._providers.append(BochaSearchProvider(bocha_keys))
-            logger.info(f"已配置 Bocha 搜索，共 {len(bocha_keys)} 个 API Key")
-
         # 2. Tavily（免费额度更多，每月 1000 次）
         if tavily_keys:
             self._providers.append(TavilySearchProvider(tavily_keys))
@@ -2499,11 +2102,6 @@ class SearchService:
         if serpapi_keys:
             self._providers.append(SerpAPISearchProvider(serpapi_keys))
             logger.info(f"已配置 SerpAPI 搜索，共 {len(serpapi_keys)} 个 API Key")
-
-        # 5. Anspire Search（可选，位于 SerpAPI 之后）
-        if anspire_keys:
-            self._providers.append(AnspireSearchProvider(anspire_keys))
-            logger.info(f"已配置 Anspire Search 搜索，共 {len(anspire_keys)} 个 API Key")
 
         # 6. MiniMax（Coding Plan Web Search，结构化结果）
         if minimax_keys:
@@ -5022,9 +4620,7 @@ def get_search_service() -> SearchService:
                 config = get_config()
                 
                 _search_service = SearchService(
-                    bocha_keys=config.bocha_api_keys,
                     tavily_keys=config.tavily_api_keys,
-                    anspire_keys=config.anspire_api_keys,
                     brave_keys=config.brave_api_keys,
                     serpapi_keys=config.serpapi_keys,
                     minimax_keys=config.minimax_api_keys,

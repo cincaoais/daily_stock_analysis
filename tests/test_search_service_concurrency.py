@@ -237,7 +237,7 @@ class SearchServiceConcurrencyTestCase(unittest.TestCase):
 
     def test_bounded_topic_search_caches_in_parent_before_starting_another_process(self):
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -268,7 +268,7 @@ class SearchServiceConcurrencyTestCase(unittest.TestCase):
 
     def test_bounded_topic_search_waits_when_retry_reservation_has_another_owner(self):
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -311,7 +311,7 @@ class SearchServiceConcurrencyTestCase(unittest.TestCase):
 
     def test_bounded_topic_search_cache_wait_uses_the_caller_deadline(self):
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
@@ -336,7 +336,7 @@ class SearchServiceConcurrencyTestCase(unittest.TestCase):
 
     def test_bounded_topic_search_provider_receives_only_remaining_deadline(self):
         service = SearchService(
-            bocha_keys=["dummy_key"],
+            tavily_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",

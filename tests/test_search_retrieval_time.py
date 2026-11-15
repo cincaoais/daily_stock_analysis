@@ -6,11 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
-from src.search_service import BochaSearchProvider, SearchResponse, SearchResult, SearchService, SearXNGSearchProvider, TavilySearchProvider
+from src.search_service import SearchResponse, SearchResult, SearchService, SearXNGSearchProvider, TavilySearchProvider
 
 
 @pytest.mark.parametrize("provider,kwargs", [
-    (BochaSearchProvider(["test-key"]), {}),
     (SearXNGSearchProvider(base_urls=["https://search.example.test"], use_public_instances=False), {}),
     (TavilySearchProvider(["test-key"]), {"topic": "news"}),
 ])
@@ -27,7 +26,7 @@ def test_fresh_provider_search_records_retrieval_time(provider, kwargs):
 
 @pytest.mark.parametrize("published_date", [None, datetime.now().date().isoformat()])
 def test_search_processing_and_cache_preserve_original_time(published_date):
-    service = SearchService(bocha_keys=["test-key"], searxng_public_instances_enabled=False)
+    service = SearchService(tavily_keys=["test-key"], searxng_public_instances_enabled=False)
     timestamp = "2026-01-02T03:04:05+00:00"
     response = SearchResponse("test", [SearchResult(
         "贵州茅台 600519 公告", "贵州茅台公司公告", "https://example.test", "test",

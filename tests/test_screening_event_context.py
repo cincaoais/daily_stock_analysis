@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import re
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -146,7 +146,7 @@ def test_event_evidence_reaches_llm_then_existing_risk_overlay_and_history(scree
 
 
 def test_real_search_retrieval_time_survives_cache_prompt_response_and_history(screening_run, monkeypatch):
-    search = SearchService(bocha_keys=["test-key"], searxng_public_instances_enabled=False)
+    search = SearchService(tavily_keys=["test-key"], searxng_public_instances_enabled=False)
     monkeypatch.setattr(screening_service, "_get_dsa_search_service", lambda: search)
     acquired = datetime.now(timezone.utc)
 
@@ -155,17 +155,15 @@ def test_real_search_retrieval_time_survives_cache_prompt_response_and_history(s
         def now(cls, tz=None):
             return now.astimezone(tz) if tz else now.replace(tzinfo=None)
 
-    def http_response(*args, **kwargs):
-        code = re.search(r"\d{6}", kwargs["json"]["query"])[0]
-        response = Mock(status_code=200)
-        response.json.return_value = {"code": 200, "data": {"webPages": {"value": [{
-            "name": f"{code} 公司公告", "summary": f"{code} 公司业绩快报",
-            "url": f"https://example.test/{code}", "siteName": "test-provider",
-            "datePublished": acquired.date().isoformat(),
-        }]}}}
-        return response
+    def provider_response(query, *args, **kwargs):
+        code = re.search(r"\d{6}", query)[0]
+        return SearchResponse(query=query, provider="Tavily", success=True, results=[SearchResult(
+            title=f"{code} 公司公告", snippet=f"{code} 公司业绩快报",
+            url=f"https://example.test/{code}", source="test-provider",
+            published_date=acquired.date().isoformat(),
+        )])
 
-    with patch("src.search_service._post_with_retry", side_effect=http_response) as request:
+    with patch.object(search._providers[0], "_do_search", side_effect=provider_response) as request:
         for elapsed, expected_requests in ((0, 4), (30, 4), (search._cache_ttl + 1, 8)):
             now = acquired + timedelta(seconds=elapsed)
             expected = acquired if elapsed <= search._cache_ttl else now
@@ -174,7 +172,7 @@ def test_real_search_retrieval_time_survives_cache_prompt_response_and_history(s
             ):
                 response = screening_run.run()
 
-            # Only HTTP is mocked: provider parsing, timestamp acquisition,
+            # Only the provider wire call is mocked: timestamp acquisition,
             # SearchService filtering/ranking/cache and screening all run.
             assert request.call_count == expected_requests
             candidates = _prompt_candidates(screening_run.state["prompts"][-1])

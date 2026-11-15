@@ -146,7 +146,7 @@ LITELLM_MODEL=ollama/qwen3:8b
 
 ### Anspire Open legacy 兼容示例
 
-现有 Anspire 搜索与 LLM 共用 Key 的兼容路径继续保留。以下为配置示例，模型与网关可用性以账号权限和 Anspire 控制台为准；可在 Web 设置页点击“测试连接”确认。
+Anspire LLM 兼容路径继续保留（Anspire 搜索已移除）。以下为配置示例，模型与网关可用性以账号权限和 Anspire 控制台为准；可在 Web 设置页点击“测试连接”确认。
 
 ```env
 # Anspire Open API Keys（支持多个，逗号分隔）

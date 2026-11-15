@@ -50,7 +50,6 @@ const categoryDescriptionMap: Record<UiLanguage, Partial<Record<SystemConfigCate
 const fieldTitleMap: Record<string, string> = {
   STOCK_LIST: '自选股列表',
   TUSHARE_TOKEN: 'Tushare Token',
-  BOCHA_API_KEYS: 'Bocha API Keys',
   TAVILY_API_KEYS: 'Tavily API Keys',
   ANSPIRE_API_KEYS: 'Anspire API Keys',
   SERPAPI_API_KEYS: 'SerpAPI API Keys',
@@ -230,9 +229,8 @@ const fieldTitleMap: Record<string, string> = {
 const fieldDescriptionMap: Record<string, string> = {
   STOCK_LIST: '推荐使用英文逗号分隔股票代码；中文逗号、顿号、分号、空格和换行会在保存后规范为英文逗号。',
   TUSHARE_TOKEN: '用于接入 Tushare Pro 数据服务的凭据。',
-  BOCHA_API_KEYS: '用于新闻检索的 Bocha 密钥，支持逗号分隔多个（最高优先级）。',
   TAVILY_API_KEYS: '用于新闻检索的 Tavily 密钥，支持逗号分隔多个。',
-  ANSPIRE_API_KEYS: 'Anspire Open 密钥，支持逗号分隔多个；默认同时用于大模型网关和新闻检索。',
+  ANSPIRE_API_KEYS: 'Anspire Open 密钥，支持逗号分隔多个；默认用于 Anspire 大模型网关。',
   SERPAPI_API_KEYS: '用于新闻检索的 SerpAPI 密钥，支持逗号分隔多个。',
   BRAVE_API_KEYS: '用于新闻检索的 Brave Search 密钥，支持逗号分隔多个。',
   STOCK_INDEX_REMOTE_UPDATE_ENABLED: '控制是否从 GitHub main 远程刷新股票自动补全索引；失败会降级到本地缓存或内置索引，不影响主分析流程。',

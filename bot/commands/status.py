@@ -104,7 +104,6 @@ class StatusCommand(BotCommand):
         )
         
         # 搜索服务状态
-        status["search_bocha"] = len(config.bocha_api_keys) > 0
         status["search_tavily"] = len(config.tavily_api_keys) > 0
         status["search_brave"] = len(config.brave_api_keys) > 0
         status["search_serpapi"] = len(config.serpapi_keys) > 0
@@ -181,7 +180,6 @@ class StatusCommand(BotCommand):
             ),
             "",
             "**🔍 搜索服务**",
-            f"• Bocha: {icon(status['search_bocha'])}",
             f"• Tavily: {icon(status['search_tavily'])}",
             f"• Brave: {icon(status['search_brave'])}",
             f"• SerpAPI: {icon(status['search_serpapi'])}",

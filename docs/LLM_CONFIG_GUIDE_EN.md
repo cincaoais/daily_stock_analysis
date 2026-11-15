@@ -144,7 +144,7 @@ Existing Anspire setups that share a key between search and LLMs remain supporte
 ```env
 # Anspire Open API keys (multiple keys supported, separated by commas)
 # Get your key at: https://open.anspire.cn/dsa?share_code=QFBC0FYC
-# When no higher-priority OpenAI-compatible source is set, this key is reused for Anspire search + LLM path (example fallback behavior only).
+# When no higher-priority OpenAI-compatible source is set, this key is reused for the Anspire LLM path (example fallback behavior only; Anspire search was removed).
 # Example model: Doubao-Seed-2.0-lite; example gateway: https://open-gateway.anspire.cn/v6
 ANSPIRE_API_KEYS=sk-xxxxxxxxxxxxxxxx
 # Optional: switch example model or gateway according to your Anspire account and official docs.
