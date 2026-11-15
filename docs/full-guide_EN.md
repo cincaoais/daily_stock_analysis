@@ -1652,7 +1652,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/analysis/analyze \
 # pass strategy list (optional)
 curl -X POST http://127.0.0.1:8000/api/v1/analysis/analyze \
   -H 'Content-Type: application/json' \
-  -d '{"stock_code": "600519", "skills": ["bull_trend", "growth_quality"]}'
+  -d '{"stock_code": "600519", "skills": ["chan_theory", "chan_third_buy"]}'
 
 # Query task status
 curl http://127.0.0.1:8000/api/v1/analysis/status/<task_id>

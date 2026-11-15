@@ -369,7 +369,7 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
         from src.storage import DatabaseManager
 
         config = _build_config(agent_backend="litellm", agent_arch="single",
-                               agent_skills=["ma_golden_cross"],
+                               agent_skills=["chan_third_buy"],
                                agent_context_compression_enabled=False)
         config.is_agent_available = lambda: True
         run_requests = []
@@ -404,7 +404,7 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
         self.assertEqual(len(run_requests), 1)
         self.assertIn(resolve_skill_prompt_state(config, skills=[]).skill_instructions,
                       run_requests[0].system_prompt)
-        self.assertNotIn(resolve_skill_prompt_state(config, skills=["ma_golden_cross"]).skill_instructions,
+        self.assertNotIn(resolve_skill_prompt_state(config, skills=["chan_third_buy"]).skill_instructions,
                          run_requests[0].system_prompt)
         self.assertNotIn("old_skill", run_requests[0].system_prompt)
         self.assertNotIn("older_strategy", run_requests[0].system_prompt)

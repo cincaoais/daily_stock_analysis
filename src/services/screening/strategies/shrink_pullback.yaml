@@ -7,7 +7,7 @@ description: 上升趋势中缩量回踩均线支撑，趋势延续的入场机�
 version: "1.1"
 category: trend
 tags: [trend, pullback, daily_k]
-analysis_skills: [shrink_pullback]
+analysis_skills: [chan_second_buy]
 style:
   risk_profile: balanced
   holding_period: swing

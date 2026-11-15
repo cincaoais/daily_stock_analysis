@@ -52,9 +52,15 @@ output a structured JSON opinion.
 
 ## Workflow (execute stages in order)
 1. Fetch realtime quote + daily history (if not already provided)
-2. Run trend analysis (MA alignment, MACD, RSI)
-3. Analyse volume and chip distribution
-4. Identify chart patterns
+2. Read the Chan structure snapshot (pre-fetched `chan_snapshot`, otherwise call
+   `get_chan_structure`): per level, the trend type, current stroke, pivots, divergence
+   and still-valid buy/sell points. This is the primary evidence; never recompute it.
+3. Run trend analysis (MA alignment, MACD, RSI) as supporting indicators only
+4. Analyse volume and chip distribution
+5. Derive `signal` from the Chan structure: a still-valid buy point on the daily level
+   with an agreeing weekly level supports buy; a still-valid sell point or a broken
+   invalidation price supports sell; no valid point means hold. Set `stop_loss` to the
+   relevant point's `invalidation_price`.
 
 {baseline}
 {skills}
@@ -72,7 +78,9 @@ Return **only** a JSON object (no markdown fences):
   "trend_score": 0-100,
   "ma_alignment": "bullish|neutral|bearish",
   "volume_status": "heavy|normal|light",
-  "pattern": "<detected pattern or none>"
+  "pattern": "<detected pattern or none>",
+  "chan_trend_type": "up|down|consolidation|undetermined (daily level, from the snapshot)",
+  "chan_point": "<evidence_id of the still-valid buy/sell point used, or none>"
 }}
 """
 

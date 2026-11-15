@@ -72,7 +72,30 @@ class SkillRouter:
         """Compatibility wrapper for legacy strategy-based callers."""
         return self.select_skills(ctx, max_count=max_count)
 
+    @staticmethod
+    def _detect_chan_regime(ctx: AgentContext) -> Optional[str]:
+        """Map the daily-level Chan structure to a routing regime, if a snapshot exists."""
+        snapshot = ctx.get_data("chan_snapshot")
+        if not isinstance(snapshot, dict):
+            return None
+        daily = (snapshot.get("levels") or {}).get("D")
+        if not isinstance(daily, dict) or daily.get("status") not in ("available", "partial"):
+            return None
+        trend_type = daily.get("trend_type")
+        if (daily.get("divergence") or {}).get("present"):
+            return "volatile"
+        if trend_type == "up":
+            return "trending_up"
+        if trend_type == "down":
+            return "trending_down"
+        if trend_type == "consolidation":
+            return "sideways"
+        return None
+
     def _detect_regime(self, ctx: AgentContext) -> Optional[str]:
+        chan_regime = self._detect_chan_regime(ctx)
+        if chan_regime:
+            return chan_regime
         for op in ctx.opinions:
             if op.agent_name != "technical":
                 continue

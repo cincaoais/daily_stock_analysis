@@ -399,17 +399,17 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
         )
         kwargs, skill_manager = self._run_factory_case(
             config,
-            request_skills=["chan_theory"],
+            request_skills=["chan_third_buy"],
             skill_catalog=[
-                self._make_skill("bull_trend", default_active=True, default_priority=10),
-                self._make_skill("chan_theory", default_priority=20),
+                self._make_skill("chan_theory", default_active=True, default_priority=10),
+                self._make_skill("chan_third_buy", default_priority=20),
             ],
-            instructions="chan_theory instructions",
+            instructions="chan_third_buy instructions",
         )
 
         self.assertEqual(kwargs["default_skill_policy"], "")
         self.assertFalse(kwargs["use_legacy_default_prompt"])
-        skill_manager.activate.assert_called_once_with(["chan_theory"])
+        skill_manager.activate.assert_called_once_with(["chan_third_buy"])
 
     def test_configured_skills_disable_default_skill_policy(self):
         config = SimpleNamespace(
@@ -422,7 +422,7 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             config,
             request_skills=None,
             skill_catalog=[
-                self._make_skill("bull_trend", default_active=True, default_priority=10),
+                self._make_skill("chan_theory", default_active=True, default_priority=10),
                 self._make_skill("wave_theory", default_priority=20),
             ],
             instructions="wave_theory instructions",
@@ -442,13 +442,13 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
         kwargs, skill_manager = self._run_factory_case(
             config,
             request_skills=None,
-            skill_catalog=[self._make_skill("bull_trend", default_active=True, default_priority=10)],
-            instructions="bull_trend instructions",
+            skill_catalog=[self._make_skill("chan_theory", default_active=True, default_priority=10)],
+            instructions="chan_theory instructions",
         )
 
-        self.assertIn("严进策略", kwargs["default_skill_policy"])
+        self.assertIn("结构先行", kwargs["default_skill_policy"])
         self.assertTrue(kwargs["use_legacy_default_prompt"])
-        skill_manager.activate.assert_called_once_with(["bull_trend"])
+        skill_manager.activate.assert_called_once_with(["chan_theory"])
 
     def test_explicit_empty_request_falls_back_to_primary_default_skill(self):
         config = SimpleNamespace(
@@ -461,15 +461,15 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             config,
             request_skills=[],
             skill_catalog=[
-                self._make_skill("bull_trend", default_active=True, default_priority=10),
-                self._make_skill("chan_theory", default_priority=20),
+                self._make_skill("chan_theory", default_active=True, default_priority=10),
+                self._make_skill("chan_third_buy", default_priority=20),
             ],
-            instructions="bull_trend instructions",
+            instructions="chan_theory instructions",
         )
 
-        self.assertIn("严进策略", kwargs["default_skill_policy"])
+        self.assertIn("结构先行", kwargs["default_skill_policy"])
         self.assertTrue(kwargs["use_legacy_default_prompt"])
-        skill_manager.activate.assert_called_once_with(["bull_trend"])
+        skill_manager.activate.assert_called_once_with(["chan_theory"])
 
     def test_explicit_primary_default_skill_uses_skill_aware_prompt_mode(self):
         config = SimpleNamespace(
@@ -480,17 +480,17 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
         )
         kwargs, skill_manager = self._run_factory_case(
             config,
-            request_skills=["bull_trend"],
+            request_skills=["chan_theory"],
             skill_catalog=[
-                self._make_skill("bull_trend", default_active=True, default_priority=10),
-                self._make_skill("chan_theory", default_priority=20),
+                self._make_skill("chan_theory", default_active=True, default_priority=10),
+                self._make_skill("chan_third_buy", default_priority=20),
             ],
-            instructions="bull_trend instructions",
+            instructions="chan_theory instructions",
         )
 
         self.assertEqual(kwargs["default_skill_policy"], "")
         self.assertFalse(kwargs["use_legacy_default_prompt"])
-        skill_manager.activate.assert_called_once_with(["bull_trend"])
+        skill_manager.activate.assert_called_once_with(["chan_theory"])
 
     def test_invalid_configured_skills_fall_back_to_primary_default_skill(self):
         config = SimpleNamespace(
@@ -503,15 +503,15 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             config,
             request_skills=None,
             skill_catalog=[
-                self._make_skill("bull_trend", default_active=True, default_priority=10),
-                self._make_skill("chan_theory", default_priority=20),
+                self._make_skill("chan_theory", default_active=True, default_priority=10),
+                self._make_skill("chan_third_buy", default_priority=20),
             ],
-            instructions="bull_trend instructions",
+            instructions="chan_theory instructions",
         )
 
-        self.assertIn("严进策略", kwargs["default_skill_policy"])
+        self.assertIn("结构先行", kwargs["default_skill_policy"])
         self.assertTrue(kwargs["use_legacy_default_prompt"])
-        skill_manager.activate.assert_called_once_with(["bull_trend"])
+        skill_manager.activate.assert_called_once_with(["chan_theory"])
 
     def test_custom_default_skill_does_not_use_legacy_bull_prompt(self):
         config = SimpleNamespace(
@@ -525,7 +525,7 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             request_skills=None,
             skill_catalog=[
                 self._make_skill("custom_default", default_active=True, default_priority=10),
-                self._make_skill("bull_trend", default_priority=20),
+                self._make_skill("chan_theory", default_priority=20),
             ],
             instructions="custom_default instructions",
         )
@@ -534,7 +534,7 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
         self.assertFalse(kwargs["use_legacy_default_prompt"])
         skill_manager.activate.assert_called_once_with(["custom_default"])
 
-    def test_custom_bull_trend_override_does_not_use_legacy_prompt(self):
+    def test_custom_chan_theory_override_does_not_use_legacy_prompt(self):
         config = SimpleNamespace(
             agent_arch="single",
             agent_skills=[],
@@ -546,18 +546,18 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             request_skills=None,
             skill_catalog=[
                 self._make_skill(
-                    "bull_trend",
+                    "chan_theory",
                     default_active=True,
                     default_priority=10,
-                    source="/tmp/custom-skills/bull_trend.yaml",
+                    source="/tmp/custom-skills/chan_theory.yaml",
                 ),
             ],
-            instructions="custom bull_trend instructions",
+            instructions="custom chan_theory instructions",
         )
 
         self.assertEqual(kwargs["default_skill_policy"], "")
         self.assertFalse(kwargs["use_legacy_default_prompt"])
-        skill_manager.activate.assert_called_once_with(["bull_trend"])
+        skill_manager.activate.assert_called_once_with(["chan_theory"])
 
 
 # ============================================================
@@ -3388,11 +3388,11 @@ class TestSkillActivation(unittest.TestCase):
         self.assertEqual(count, len(_builtin_strategy_names()), "Should load all built-in strategies from YAML")
 
         default_ids = get_default_active_skill_ids(skill_manager.list_skills())
-        self.assertEqual(default_ids, ["bull_trend"])
+        self.assertEqual(default_ids, ["chan_theory"])
         skill_manager.activate(default_ids)
 
         active = skill_manager.list_active_skills()
-        self.assertEqual([skill.name for skill in active], ["bull_trend"])
+        self.assertEqual([skill.name for skill in active], ["chan_theory"])
 
     def test_sentiment_score_parsed_from_dashboard(self):
         """Verify _agent_result_to_analysis_result handles non-numeric sentiment_score."""

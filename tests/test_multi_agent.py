@@ -581,8 +581,7 @@ class TestStrategyRouter(unittest.TestCase):
     @patch(
         "src.agent.skills.router.StrategyRouter._get_available_skills",
         return_value=[
-            SimpleNamespace(name="bull_trend", default_router=True, default_priority=10),
-            SimpleNamespace(name="shrink_pullback", default_router=True, default_priority=40),
+            SimpleNamespace(name="chan_theory", default_router=True, default_priority=10),
         ],
     )
     @patch("src.config.get_config", return_value=SimpleNamespace(agent_skills=[]))
@@ -2406,7 +2405,7 @@ class TestTechnicalAgentSkillPolicy(unittest.TestCase):
         )
         prompt = agent.system_prompt(AgentContext(query="分析 600519", stock_code="600519"))
 
-        self.assertIn("Bias from MA5 < 2%", prompt)
+        self.assertIn("`invalidation_price`", prompt)
         self.assertIn("### 技能 1: 默认多头趋势", prompt)
 
 

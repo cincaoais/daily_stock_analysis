@@ -159,7 +159,7 @@ DSA 中存在两类用途不同的策略文件：
 | `src/services/screening/strategies/*.yaml` | 从全市场筛出哪些候选 | `src/services/screening/strategy.py` | 快照过滤、因子评分、风险和排序 |
 | `strategies/*.yaml` | 对单只股票如何分析和形成结论 | `src/agent/skills/base.py` | DSA Agent/报告分析 |
 
-即使 `shrink_pullback`、`volume_breakout` 同名，两者也使用不同目录、Schema 和 loader，不会相互覆盖。筛选策略可通过 `analysis_skills` 声明下一阶段建议使用的分析 skill；Web 的“进一步深度分析”会显式携带这些 skill。未声明映射的筛选策略继续使用用户当前选择或默认分析策略，不做含义不可靠的强行映射。
+筛选策略（如 `shrink_pullback`、`volume_breakout`）与 `strategies/` 下的缠论分析策略使用不同目录、Schema 和 loader，不会相互覆盖。筛选策略可通过 `analysis_skills` 声明下一阶段建议使用的分析 skill；Web 的“进一步深度分析”会显式携带这些 skill。未声明映射的筛选策略继续使用用户当前选择或默认分析策略，不做含义不可靠的强行映射。
 
 ## DSA 原生能力复用
 

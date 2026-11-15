@@ -32,7 +32,7 @@ class Skill:
     loaded from YAML files written in natural language.
 
     Attributes:
-        name: Unique strategy identifier (e.g., "dragon_head").
+        name: Unique strategy identifier (e.g., "chan_theory").
         display_name: Human-readable name (e.g., "龙头策略").
         description: Brief description of when to apply this strategy.
         instructions: Detailed natural language instructions injected into the system prompt.
@@ -329,7 +329,7 @@ class SkillManager:
         # Or register programmatically
         manager.register(some_skill)
         # Activate and generate prompt
-        manager.activate(["dragon_head", "shrink_pullback"])
+        manager.activate(["chan_theory", "chan_third_buy"])
         instructions = manager.get_skill_instructions()
     """
 

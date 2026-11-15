@@ -375,7 +375,7 @@ const fieldDescriptionMap: Record<string, string> = {
   AGENT_BACKEND: '选择问股 Chat 的默认模型执行方式。自动（推荐）保持当前默认模型配置。',
   AGENT_GENERATION_BACKEND: '用于问股助手生成回复并调用行情、新闻和历史数据工具。通常保持“自动”，系统会选择当前可用的方式。',
   AGENT_MAX_STEPS: '默认模型配置的 Agent 最大推理步数。',
-  AGENT_SKILLS: '逗号分隔的交易策略列表。留空时使用 metadata 里声明的主默认策略 skill（内置默认是 bull_trend）；也可填写 all 启用全部策略。',
+  AGENT_SKILLS: '逗号分隔的交易策略列表。留空时使用 metadata 里声明的主默认策略 skill（内置默认是 chan_theory）；也可填写 all 启用全部策略。',
   AGENT_SKILL_DIR: '存放 Agent 策略定义文件的目录路径，支持 YAML 与 SKILL.md bundle。',
   AGENT_ARCH: "选择 Agent 执行架构。single 为经典单 Agent；multi 为多 Agent 编排（实验性）。",
   AGENT_ORCHESTRATOR_MODE: "Multi-Agent 编排深度。quick（技术→决策）、standard（技术→情报→决策）、full（含风控）、specialist（含策略专家评估）。",

@@ -140,7 +140,7 @@ get_skill_backtest_summary_tool = ToolDefinition(
         ToolParameter(
             name="skill_id",
             type="string",
-            description="Skill identifier, e.g. 'bull_trend'.",
+            description="Skill identifier, e.g. 'chan_theory'.",
             required=True,
         ),
         ToolParameter(

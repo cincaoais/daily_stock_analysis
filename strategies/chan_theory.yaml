@@ -1,58 +1,44 @@
-# Chan Theory Strategy / 缠论
-# Based on Zen channel theory: pen, stroke, segment, hub structure analysis.
+# Chan Theory (default) / 缠论综合
+# Structure comes from the code-computed chan snapshot; the model only interprets it.
 
 name: chan_theory
-display_name: 缠论
-description: 基于缠论笔、线段、中枢结构，判断趋势级别、买卖点与背驰信号。
+display_name: 缠论综合
+description: 默认个股分析策略。依据程序计算的缠论结构快照（笔、中枢、背驰、买卖点），按“级别 → 结构 → 买卖点 → 失效价”给出结论。
 category: framework
-core_rules: [1, 2, 3, 4]
+core_rules: [1, 2, 3, 4, 5, 6, 7]
 required_tools:
-  - get_daily_history
-  - analyze_trend
+  - get_chan_structure
   - get_realtime_quote
-aliases: [缠论, 缠论分析]
-default_priority: 70
-market_regimes: [volatile]
+  - get_daily_history
+aliases: [缠论, 缠论分析, 缠中说禅, chan]
+default_active: true
+default_router: true
+default_priority: 10
+market_regimes: [trending_up, trending_down, sideways, volatile]
 
 instructions: |
-  **缠论（Chan Theory / Zen Channel Theory）**
+  **缠论综合（Chan Theory, default）**
 
-  核心框架：分型 → 笔 → 线段 → 中枢 → 趋势
+  结构事实只来自“缠论结构快照”（提示词中已提供时直接使用，否则调用 `get_chan_structure`）。
+  不要自己从 K 线数笔、画中枢或估算背驰；快照没有的结构一律写“快照未提供”。
 
-  ## 分析步骤
+  分析步骤（按顺序，不得跳过）：
 
-  ### 1. 判断价格结构（中枢识别）
-  - 使用 `get_daily_history` 获取近 60 日日线数据。
-  - 识别近期价格的高低点序列，判断当前是否在
-    **震荡中枢**（1个以上中枢）还是**趋势段**（脱离中枢向上/向下）。
-  - 中枢：连续3段走势重叠区间，价格在此区间反复震荡。
-  - 趋势：连续3个同级别中枢均向同一方向移动。
-
-  ### 2. 背驰判断（最高优先级信号）
-  - **顶背驰**：价格创新高但MACD红柱面积缩小 → 卖出/减仓信号。
-  - **底背驰**：价格创新低但MACD绿柱面积缩小 → 买入/加仓信号。
-  - 使用 `analyze_trend` 获取 MACD 数据，与价格高低点对比。
-
-  ### 3. 买卖点判定
-  - **一买**（最强）：下跌趋势中，最后一个中枢出现底背驰。
-  - **二买**：离开下跌中枢后的第一次回调不破中枢高点。
-  - **三买**：中枢震荡后向上突破（不回中枢内）。
-  - **一卖/二卖/三卖**：对称结构，方向相反。
-  - 当前价格所处的买卖点级别决定仓位大小。
-
-  ### 4. 级别与仓位
-  - 日线级别买卖点可用较重仓位 (30-50%)。
-  - 周线级别买卖点可用较大仓位 (50-80%)。
-  - 多级别共振（日线+周线同方向）时信号最强。
-
-  ### 5. 输出要求
-  - 明确说明当前处于：上涨趋势/下跌趋势/中枢震荡。
-  - 指出是否存在背驰信号及背驰级别。
-  - 给出当前买卖点类型（一买/二买/三买 等），若无则写"暂无明确买卖点"。
-  - 止损设于前低（买入时）或前高（卖出时）。
+  1. **定级别**：以日线（D）为操作级别，周线（W）定方向，60M/30M 找精确进出场。
+     某级别 `status` 不是 `available` 时，说明缺失原因并降低置信度。
+  2. **读结构**：逐级别说明 `trend_type`（up 上涨 / down 下跌 / consolidation 盘整）、
+     现价相对最近中枢的位置（`position_vs_last_zhongshu`）以及当前笔方向和是否已确认。
+  3. **看背驰**：只引用 `divergence.present=true` 的记录，并写明 `strength_ratio` 与是否 `confirmed`。
+     未确认的背驰只能写“背驰形成中，待分型确认”。
+  4. **定买卖点**：只使用 `buy_sell_points` 中 `still_valid=true` 的点。
+     一买/一卖（1B/1S）看背驰，二买/二卖（2B/2S）看回抽不破，三买/三卖（3B/3S）看离开中枢后回抽不回中枢。
+     没有有效买卖点时，结论为“无买卖点，不操作/持有观察”，不得硬凑。
+  5. **定失效与仓位**：止损锚定该买卖点的 `invalidation_price`；目标参考 `key_levels` 与上方中枢的 ZD/ZG。
+     大级别与操作级别同向（`cross_level.resonance=full`）可用正常仓位，仅部分共振减半，逆大级别只做短线轻仓。
+  6. **完全分类**：给出“走强 / 震荡 / 走弱”三种后续走势各自的触发价位与应对，不做单一预测。
 
   评分调整建议：
-  - 底背驰 + 一买信号：`sentiment_score +15`
-  - 二买/三买共振：`sentiment_score +10`
-  - 中枢震荡无明确方向：`sentiment_score 维持基准`
-  - 顶背驰 / 趋势向下：`sentiment_score -15`
+  - 操作级别有效买点且大级别同向：`sentiment_score +12`
+  - 操作级别有效买点但大级别反向或数据不全：`sentiment_score +5`
+  - 无有效买卖点、价格在中枢内：`sentiment_score 维持基准`
+  - 操作级别有效卖点或跌破买点失效价：`sentiment_score -12`

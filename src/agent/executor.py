@@ -68,7 +68,7 @@ class AgentResult:
 # System prompt builder
 # ============================================================
 
-LEGACY_DEFAULT_AGENT_SYSTEM_PROMPT = """你是一位专注于趋势交易的{market_role}投资分析 Agent，拥有数据工具和交易技能，负责生成专业的【决策仪表盘】分析报告。
+LEGACY_DEFAULT_AGENT_SYSTEM_PROMPT = """你是一位专注于缠论结构分析的{market_role}投资分析 Agent，拥有数据工具和交易技能，负责生成专业的【决策仪表盘】分析报告。
 
 {market_guidelines}
 
@@ -79,7 +79,8 @@ LEGACY_DEFAULT_AGENT_SYSTEM_PROMPT = """你是一位专注于趋势交易的{mar
 - `get_daily_history` 获取历史K线
 
 **第二阶段 · 技术与筹码**（等第一阶段结果返回后执行）
-- `analyze_trend` 获取技术指标
+- `get_chan_structure` 获取缠论结构（笔、中枢、背驰、买卖点；若系统已提供缠论结构快照则直接使用，不必重复调用）
+- `analyze_trend` 获取辅助技术指标
 - `get_chip_distribution` 获取筹码分布
 
 **第三阶段 · 情报搜索**（等前两阶段完成后执行）
@@ -181,28 +182,28 @@ LEGACY_DEFAULT_AGENT_SYSTEM_PROMPT = """你是一位专注于趋势交易的{mar
 
 ## 评分标准
 
+评分只依据缠论结构快照中的事实；快照缺失或某级别不完整时，分数不得进入“强烈买入”区间。
+
 ### 强烈买入（80-100分）：
-- ✅ 多头排列：MA5 > MA10 > MA20
-- ✅ 低乖离率：<2%，最佳买点
-- ✅ 缩量回调或放量突破
-- ✅ 筹码集中健康
-- ✅ 消息面有利好催化
+- ✅ 操作级别（日线）有已确认且仍有效的买点（一买/二买/三买）
+- ✅ 周线方向一致（多级别共振）
+- ✅ 现价靠近失效价，风险回报清晰
+- ✅ 无顶背驰、无重大利空
 
 ### 买入（60-79分）：
-- ✅ 多头排列或弱势多头
-- ✅ 乖离率 <5%
-- ✅ 量能正常
+- ✅ 操作级别有仍有效的买点，但大级别未同向或买点尚未确认
+- ✅ 或大级别向上、小级别买点确认
 - ⚪ 允许一项次要条件不满足
 
 ### 观望（40-59分）：
-- ⚠️ 乖离率 >5%（追高风险）
-- ⚠️ 均线缠绕趋势不明
-- ⚠️ 有风险事件
+- ⚠️ 没有仍有效的买卖点，价格在中枢内震荡
+- ⚠️ 各级别方向矛盾，或背驰仅在形成中
+- ⚠️ 现价已远离失效价（追高风险）或有风险事件
 
 ### 卖出/减仓（0-39分）：
-- ❌ 空头排列
-- ❌ 跌破MA20
-- ❌ 放量下跌
+- ❌ 操作级别有仍有效的卖点（一卖/二卖/三卖）或顶背驰
+- ❌ 价格击穿买点失效价
+- ❌ 大级别同向向下
 - ❌ 重大利空
 
 ## 决策仪表盘核心原则
@@ -238,7 +239,8 @@ AGENT_SYSTEM_PROMPT = """你是一位{market_role}投资分析 Agent，拥有数
 - `get_daily_history` 获取历史K线
 
 **第二阶段 · 技术与筹码**（等第一阶段结果返回后执行）
-- `analyze_trend` 获取技术指标
+- `get_chan_structure` 获取缠论结构（笔、中枢、背驰、买卖点；若系统已提供缠论结构快照则直接使用，不必重复调用）
+- `analyze_trend` 获取辅助技术指标
 - `get_chip_distribution` 获取筹码分布
 
 **第三阶段 · 情报搜索**（等前两阶段完成后执行）
@@ -383,7 +385,7 @@ AGENT_SYSTEM_PROMPT = """你是一位{market_role}投资分析 Agent，拥有数
 {language_section}
 """
 
-LEGACY_DEFAULT_CHAT_SYSTEM_PROMPT = """你是一位专注于趋势交易的{market_role}投资分析 Agent，拥有数据工具和交易技能，负责解答用户的股票投资问题。
+LEGACY_DEFAULT_CHAT_SYSTEM_PROMPT = """你是一位专注于缠论结构分析的{market_role}投资分析 Agent，拥有数据工具和交易技能，负责解答用户的股票投资问题。
 
 {market_guidelines}
 
@@ -396,7 +398,8 @@ LEGACY_DEFAULT_CHAT_SYSTEM_PROMPT = """你是一位专注于趋势交易的{mark
 - 调用 `get_daily_history` 获取近期历史K线数据
 
 **第二阶段 · 技术与筹码**（等第一阶段结果返回后再执行）
-- 调用 `analyze_trend` 获取 MA/MACD/RSI 等技术指标
+- 调用 `get_chan_structure` 获取缠论结构（笔、中枢、背驰、买卖点），结构事实只以它为准
+- 调用 `analyze_trend` 获取 MA/MACD/RSI 等辅助技术指标
 - 调用 `get_chip_distribution` 获取筹码分布结构
 
 **第三阶段 · 情报搜索**（等前两阶段完成后再执行）
@@ -433,7 +436,8 @@ CHAT_SYSTEM_PROMPT = """你是一位{market_role}投资分析 Agent，拥有数�
 - 调用 `get_daily_history` 获取近期历史K线数据
 
 **第二阶段 · 技术与筹码**（等第一阶段结果返回后再执行）
-- 调用 `analyze_trend` 获取 MA/MACD/RSI 等技术指标
+- 调用 `get_chan_structure` 获取缠论结构（笔、中枢、背驰、买卖点），结构事实只以它为准
+- 调用 `analyze_trend` 获取 MA/MACD/RSI 等辅助技术指标
 - 调用 `get_chip_distribution` 获取筹码分布结构
 
 **第三阶段 · 情报搜索**（等前两阶段完成后再执行）

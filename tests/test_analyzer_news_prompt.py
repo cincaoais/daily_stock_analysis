@@ -90,7 +90,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
             prompt = analyzer._get_analysis_system_prompt("zh", stock_code="600519")
 
         self.assertIn("### 技能 1: 波段低吸", prompt)
-        self.assertNotIn("专注于趋势交易", prompt)
+        self.assertNotIn("专注于缠论结构分析", prompt)
 
     def test_analysis_prompt_uses_injected_skill_sections_instead_of_hardcoded_trend_baseline(self) -> None:
         with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
@@ -102,8 +102,8 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         prompt = analyzer._get_analysis_system_prompt("zh", stock_code="600519")
 
         self.assertIn("### 技能 1: 缠论", prompt)
-        self.assertNotIn("专注于趋势交易", prompt)
-        self.assertNotIn("多头排列：MA5 > MA10 > MA20", prompt)
+        self.assertNotIn("专注于缠论结构分析", prompt)
+        self.assertNotIn("操作级别（日线）有已确认且仍有效的买点", prompt)
 
     def test_analysis_prompt_keeps_injected_default_policy_for_implicit_default_run(self) -> None:
         with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
@@ -115,9 +115,9 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
 
         prompt = analyzer._get_analysis_system_prompt("zh", stock_code="600519")
 
-        self.assertIn("专注于趋势交易", prompt)
-        self.assertIn("多头排列必须条件", prompt)
-        self.assertIn("多头排列：MA5 > MA10 > MA20", prompt)
+        self.assertIn("专注于缠论结构分析", prompt)
+        self.assertIn("结构先行（只用快照）", prompt)
+        self.assertIn("操作级别（日线）有已确认且仍有效的买点", prompt)
 
     def test_analysis_prompt_requires_phase_decision_in_main_and_legacy_modes(self) -> None:
         for legacy in (False, True):
@@ -492,7 +492,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         prompt = analyzer._format_prompt(context, "贵州茅台", news_context=None)
 
         self.assertIn("当前结构是否满足激活技能的关键触发条件", prompt)
-        self.assertNotIn("是否满足 MA5>MA10>MA20 多头排列", prompt)
+        self.assertNotIn("操作级别是否存在仍有效的一/二/三类买卖点", prompt)
         self.assertNotIn("超过5%必须标注\"严禁追高\"", prompt)
         self.assertNotIn("MA5>MA10>MA20为多头", prompt)
 

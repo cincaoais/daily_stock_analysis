@@ -879,7 +879,7 @@ def test_real_factory_prepare_acceptance_and_late_result_keep_turn_scope(db, cha
     config = Config.get_instance()
     config.agent_backend = "litellm"
     config.agent_arch = "single"
-    config.agent_skills = ["ma_golden_cross"]
+    config.agent_skills = ["chan_third_buy"]
     config.agent_context_compression_enabled = False
     service = AgentChatSessionService(db)
     resolved = service.prepare_session_turn(config, "factory-accepted", "分析600519", [])
@@ -1024,7 +1024,7 @@ def actual_chat_api(db, chat_stock_index, monkeypatch, tmp_path):
     config = Config.get_instance()
     config.agent_backend = "litellm"
     config.agent_arch = "single"
-    config.agent_skills = ["ma_golden_cross"]
+    config.agent_skills = ["chan_third_buy"]
     config.agent_context_compression_enabled = False
     monkeypatch.setattr(config, "is_agent_available", lambda: True)
     monkeypatch.setattr(agent, "get_config", lambda: config)
@@ -1051,8 +1051,8 @@ def test_actual_chat_api_explicit_empty_skills_uses_builtin_not_config_default(a
     assert len(requests) == 1
     builtin = resolve_skill_prompt_state(config, skills=[])
     assert builtin.skill_instructions in requests[0].system_prompt
-    configured = resolve_skill_prompt_state(config, skills=["ma_golden_cross"])
-    assert configured.skills_to_activate == ["ma_golden_cross"]
+    configured = resolve_skill_prompt_state(config, skills=["chan_third_buy"])
+    assert configured.skills_to_activate == ["chan_third_buy"]
     assert configured.skill_instructions not in requests[0].system_prompt
     assert db.get_conversation_session_selected_skill_ids("api-empty-skill") == []
     assert len([row for row in db.get_conversation_messages("api-empty-skill") if row["role"] == "user"]) == 1
@@ -1135,7 +1135,7 @@ def test_actual_chat_api_prepare_aba_conflict_has_no_partial_acceptance(actual_c
 
     client, requests, config = actual_chat_api
     service = AgentChatSessionService(db)
-    service.commit_user_turn(service.prepare_session_turn(config, "api-aba", "分析600519", ["ma_golden_cross"]))
+    service.commit_user_turn(service.prepare_session_turn(config, "api-aba", "分析600519", ["chan_third_buy"]))
     original = db.read_chat_session_snapshot("api-aba")
     def interleave(*_args, **_kwargs):
         service.commit_user_turn(service.prepare_session_turn(config, "api-aba", "改看300750"))
@@ -1155,7 +1155,7 @@ def test_actual_chat_api_prepare_aba_conflict_has_no_partial_acceptance(actual_c
         assert response.status_code == 409 and response.json()["error"] == "session_state_conflict"
     current = db.read_chat_session_snapshot("api-aba")
     assert requests == []
-    assert current["session_state_version"] == 3 and current["selected_skill_ids"] == ["ma_golden_cross"]
+    assert current["session_state_version"] == 3 and current["selected_skill_ids"] == ["chan_third_buy"]
     assert [row["content"] for row in current["messages"]] == ["分析600519", "改看300750", "改看600519"]
 
 
@@ -1169,7 +1169,7 @@ def test_actual_chat_api_prepare_or_insert_failure_cannot_partially_accept(
 
     client, requests, config = actual_chat_api
     service = AgentChatSessionService(db)
-    service.commit_user_turn(service.prepare_session_turn(config, "api-failure", "分析600519", ["ma_golden_cross"]))
+    service.commit_user_turn(service.prepare_session_turn(config, "api-failure", "分析600519", ["chan_third_buy"]))
     before = db.read_chat_session_snapshot("api-failure")
     injected = []
 
@@ -1230,7 +1230,7 @@ def test_actual_chat_api_retired_backend_rejects_before_acceptance(actual_chat_a
     service = AgentChatSessionService(db)
     session_id = "retired-session"
     if existing:
-        service.commit_user_turn(service.prepare_session_turn(config, session_id, "分析600519", ["ma_golden_cross"]))
+        service.commit_user_turn(service.prepare_session_turn(config, session_id, "分析600519", ["chan_third_buy"]))
     before = db.read_chat_session_snapshot(session_id)
     config.agent_backend = "codex_app_server"
     response = client.post("/api/v1/agent/chat" + ("/stream" if stream else ""), json={

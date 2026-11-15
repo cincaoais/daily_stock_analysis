@@ -330,7 +330,7 @@ describe('StockScreeningPage', () => {
         stockName: '中际旭创',
         autoAnalyze: true,
         selectionSource: 'screening_hotspot',
-        skills: ['hot_theme'],
+        skills: ['chan_multi_level'],
       },
     });
   });

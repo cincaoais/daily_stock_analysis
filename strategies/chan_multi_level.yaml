@@ -1,0 +1,34 @@
+# Chan multi-level alignment / 缠论多级别联立（区间套）
+
+name: chan_multi_level
+display_name: 缠论多级别联立
+description: 用周线定方向、日线定买卖点、60/30 分钟定进出场的区间套方法，检查各级别是否共振并给出分级别的执行计划。
+category: framework
+core_rules: [1, 2, 4, 6, 7]
+required_tools:
+  - get_chan_structure
+  - get_realtime_quote
+aliases: [多级别联立, 区间套, 级别共振, 多周期]
+default_priority: 60
+market_regimes: [volatile, sector_hot]
+
+instructions: |
+  **缠论多级别联立（区间套）**
+
+  依据缠论结构快照的 `levels`（W / D / 60M / 30M）与 `cross_level`。
+
+  判断要点：
+  1. **自上而下**：先写周线的 `trend_type` 和当前笔方向，再写日线，最后写 60M/30M；每一级都注明是否 `confirmed`。
+  2. **共振判定**：`cross_level.resonance=full` 表示各级别当前笔同向；`partial` 需指出哪一级别相反；
+     `none` 或 `unknown` 时不做方向性结论。
+  3. **区间套**：大级别出现买卖点或背驰后，到次级别找同方向的买卖点来精确定位，
+     例如“日线底背驰形成中 → 等待 30M 一买或二买确认”。次级别没有对应信号就继续等待。
+  4. **冲突处理**：大级别向下而小级别买点，只按小级别反弹操作，止损用小级别的 `invalidation_price`，目标不超过大级别最近中枢。
+     大级别向上而小级别卖点，是减仓而非清仓。
+  5. **数据局限**：缺失或 `partial` 的级别必须点名，并说明因此结论只在哪些级别成立。
+
+  评分调整建议：
+  - 周线与日线同向且日线有有效买点：`sentiment_score +12`
+  - 仅小级别买点、逆大级别：`sentiment_score +3`
+  - 周线与日线同向向下且日线有有效卖点：`sentiment_score -12`
+  - 级别互相矛盾且无有效买卖点：`sentiment_score 维持基准`

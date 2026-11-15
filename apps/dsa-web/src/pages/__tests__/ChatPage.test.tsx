@@ -1159,8 +1159,8 @@ describe('ChatPage', () => {
       message: null,
     });
     mockGetSkills.mockResolvedValue({
-      skills: [{ id: 'box_oscillation', name: '箱体震荡', description: '震荡区间' }],
-      default_skill_id: 'box_oscillation',
+      skills: [{ id: 'chan_zhongshu_oscillation', name: '缠论中枢震荡', description: '震荡区间' }],
+      default_skill_id: 'chan_zhongshu_oscillation',
     });
 
     render(
@@ -1170,21 +1170,21 @@ describe('ChatPage', () => {
     );
 
     await screen.findByText('默认模型');
-    fireEvent.click(await screen.findByRole('button', { name: '用箱体震荡分析 A 股中芯国际 688981' }));
+    fireEvent.click(await screen.findByRole('button', { name: '用缠论中枢震荡分析 A 股中芯国际 688981' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: '用箱体震荡分析 A 股中芯国际 688981',
-          skills: ['box_oscillation'],
+          message: '用缠论中枢震荡分析 A 股中芯国际 688981',
+          skills: ['chan_zhongshu_oscillation'],
           context: {
             stock_code: '688981',
             stock_name: '中芯国际',
           },
         }),
         expect.objectContaining({
-          skillNames: ['箱体震荡'],
-          skillName: '箱体震荡',
+          skillNames: ['缠论中枢震荡'],
+          skillName: '缠论中枢震荡',
         }),
       );
     });

@@ -108,9 +108,9 @@ _SECTION_TEXT = {
     ),
     "en": (
         "## 🧭 Chan Structure Snapshot (computed in code; the only source of structural facts)",
-        "- The JSON below is computed from K-lines. Levels: W=weekly, D=daily, 60M/30M=intraday. Take strokes (笔), "
-        "pivots (中枢), divergence (背驰) and buy/sell points from it only; do not recompute or recall them. "
-        "`segment` = `not_supported` means segments (线段) are not computed, so do not describe them.\n"
+        "- The JSON below is computed from K-lines. Levels: W=weekly, D=daily, 60M/30M=intraday. Take strokes, "
+        "pivots, divergence and buy/sell points from it only; do not recompute or recall them. "
+        "`segment` = `not_supported` means segments are not computed, so do not describe them.\n"
         "- `confirmed=false` means still forming: describe it as forming/unconfirmed. Points with `still_valid=false` "
         "have been broken and are history only.\n"
         "- `invalidation_price` is where a buy/sell point fails; anchor stop-losses to it. For any level whose "

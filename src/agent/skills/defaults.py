@@ -25,83 +25,81 @@ LEGACY_STRATEGY_CONSENSUS_AGENT_NAME = "strategy_consensus"
 
 CORE_TRADING_SKILL_POLICY_ZH = """## 默认技能基线（必须严格遵守）
 
-当前激活的 skills 可以补充细化分析视角，但默认风险控制和交易节奏必须遵守以下基线。
+当前激活的 skills 可以补充细化分析视角，但默认风险控制和交易节奏必须遵守以下缠论基线。
 
-### 1. 严进策略（不追高）
-- **绝对不追高**：当股价偏离 MA5 超过 5% 时，坚决不买入
-- 乖离率 < 2%：最佳买点区间
-- 乖离率 2-5%：可小仓介入
-- 乖离率 > 5%：严禁追高！直接判定为"观望"
+### 1. 结构先行（只用快照）
+- 笔、中枢、背驰、买卖点一律取自程序计算的“缠论结构快照”（或 `get_chan_structure` 工具结果）
+- 不得自行从 K 线重算结构，也不得凭记忆补充；快照未提供的结构写“快照未提供”，线段未计算时不得描述线段
 
-### 2. 趋势交易（顺势而为）
-- **多头排列必须条件**：MA5 > MA10 > MA20
-- 只做多头排列的股票，空头排列坚决不碰
-- 均线发散上行优于均线粘合
+### 2. 级别明确
+- 任何结论都要说明级别：周线定方向，日线定买卖点，60/30 分钟定进出场
+- 不同级别的结论不得混用；级别数据缺失或不完整时必须说明并降低置信度
 
-### 3. 效率优先（筹码结构）
-- 关注筹码集中度：90%集中度 < 15% 表示筹码集中
-- 获利比例分析：70-90% 获利盘时需警惕获利回吐
-- 平均成本与现价关系：现价高于平均成本 5-15% 为健康
+### 3. 只在买卖点操作
+- 只有仍然有效的一、二、三类买卖点才构成操作依据
+- 没有有效买卖点时结论为“观望/持有观察”，不得因为单日涨跌追涨杀跌
 
-### 4. 买点偏好（回踩支撑）
-- **最佳买点**：缩量回踩 MA5 获得支撑
-- **次优买点**：回踩 MA10 获得支撑
-- **观望情况**：跌破 MA20 时观望
+### 4. 背驰判断
+- 背驰以快照的 MACD 面积比较为准；未确认的背驰只能写“形成中，待确认”
+- 趋势背驰的转折级别高于盘整背驰，盘整背驰只看回到中枢
 
-### 5. 风险排查重点
-- 减持公告、业绩预亏、监管处罚、行业政策利空、大额解禁
+### 5. 失效价即止损
+- 买入建议必须给出止损，并锚定对应买卖点的失效价（`invalidation_price`）
+- 买点失效（价格击穿失效价）后原判断作废，不得继续持有等待
 
-### 6. 估值关注（PE/PB）
-- PE 明显偏高时需在风险点中说明
+### 6. 多级别联立
+- 大级别与操作级别同向才可用正常仓位；逆大级别只做小级别反弹并减仓
+- 各级别方向矛盾且没有有效买卖点时，不做方向性结论
 
-### 7. 强势趋势股放宽
-- 强势趋势股可适当放宽乖离率要求，轻仓追踪但需设止损
+### 7. 风险排查与数据局限
+- 减持公告、业绩预亏、监管处罚、行业政策利空、大额解禁等重大利空优先于技术结构
+- 估值明显偏高或行情/新闻数据过期、缺失时，在风险点中说明并下调置信度
 """
 
 CORE_TRADING_SKILL_POLICY_EN = """## Default Skill Baseline (must be followed strictly)
 
-The currently activated skills may refine the analysis perspective, but the default risk controls and trading rhythm must follow this baseline.
+The currently activated skills may refine the analysis perspective, but the default risk controls and trading rhythm must follow this Chan theory baseline.
 
-### 1. Strict entry (no chasing)
-- **Never chase highs**: when the price deviates more than 5% above MA5, do not buy
-- Bias < 2%: best entry zone
-- Bias 2-5%: a small position is acceptable
-- Bias > 5%: no chasing! Classify directly as "Watch"
+### 1. Structure first (snapshot only)
+- Take strokes, pivots, divergence and buy/sell points only from the code-computed Chan structure snapshot (or the `get_chan_structure` tool result)
+- Never recompute structure from K-lines or recall it from memory; write "not in snapshot" for anything missing, and do not describe segments when they are not computed
 
-### 2. Trend trading (follow the trend)
-- **Required bullish alignment**: MA5 > MA10 > MA20
-- Only trade stocks in bullish alignment; stay away from bearish alignment
-- Diverging, rising moving averages are better than converging ones
+### 2. State the level
+- Every conclusion names its level: weekly sets direction, daily sets buy/sell points, 60/30-minute sets entries and exits
+- Do not mix conclusions across levels; when a level is missing or partial, say so and lower confidence
 
-### 3. Efficiency first (chip structure)
-- Watch chip concentration: 90% concentration < 15% means chips are concentrated
-- Profit ratio: when 70-90% of holders are in profit, beware of profit-taking
-- Average cost vs. current price: a current price 5-15% above average cost is healthy
+### 3. Act only at buy/sell points
+- Only class 1, 2 or 3 buy/sell points that are still valid justify an action
+- With no valid point the conclusion is "Watch / hold and observe"; do not chase a single day's move
 
-### 4. Entry preference (pullback to support)
-- **Best entry**: low-volume pullback to MA5 that finds support
-- **Secondary entry**: pullback to MA10 that finds support
-- **Watch**: stay on the sidelines when the price breaks below MA20
+### 4. Divergence
+- Divergence follows the snapshot's MACD-area comparison; an unconfirmed divergence is "forming, awaiting confirmation"
+- A trend divergence outranks a range divergence, which only targets a return to the pivot
 
-### 5. Risk screening focus
-- Shareholder reduction announcements, expected losses, regulatory penalties, negative industry policy, large share unlocks
+### 5. The invalidation price is the stop
+- Every buy idea carries a stop-loss anchored to the point's `invalidation_price`
+- Once a point is invalidated the thesis is void; do not keep holding and waiting
 
-### 6. Valuation (PE/PB)
-- When PE is clearly elevated, mention it in the risk points
+### 6. Multi-level alignment
+- Use a normal position only when the higher level agrees with the operating level; against the higher level, trade the smaller-level bounce with reduced size
+- When levels conflict and no point is valid, give no directional call
 
-### 7. Relaxation for strong trend stocks
-- Strong trend stocks may relax the bias requirement; track with a light position but always set a stop-loss
+### 7. Risk screening and data limits
+- Material negatives (shareholder reduction, expected losses, regulatory penalties, negative industry policy, large share unlocks) outrank technical structure
+- When valuation is clearly elevated, or quote/news data is stale or missing, state it in the risk points and lower confidence
 """
 
 TECHNICAL_SKILL_RULES_EN = """## Default Skill Baseline
 
 Treat the currently activated skills as the primary analysis lens, but keep the
-following default risk controls as the shared baseline:
+following Chan theory controls as the shared baseline:
 
-- Bullish alignment: MA5 > MA10 > MA20
-- Bias from MA5 < 2% -> ideal buy zone; 2-5% -> small position; > 5% -> no chase
-- Shrink-pullback to MA5 is the preferred entry rhythm
-- Below MA20 -> hold off unless the active skill explicitly proves a better setup
+- Structural facts (strokes, pivots, divergence, buy/sell points) come only from the
+  code-computed Chan structure snapshot or `get_chan_structure`; never recompute them
+- Name the level for every claim: weekly = direction, daily = buy/sell point, 60/30m = timing
+- Act only on buy/sell points that are still valid; no valid point -> hold off
+- Anchor the stop-loss to the point's `invalidation_price`; an invalidated point voids the thesis
+- Unconfirmed strokes or divergence are "forming"; partial or missing levels lower confidence
 """
 
 

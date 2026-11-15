@@ -1,0 +1,34 @@
+# Chan divergence reversal / 缠论背驰转折（一买一卖）
+
+name: chan_divergence_reversal
+display_name: 缠论背驰转折
+description: 寻找趋势或盘整末端的背驰转折：底背驰对应一买，顶背驰对应一卖，强调“确认后再动手”。
+category: reversal
+core_rules: [1, 2, 4, 5, 7]
+required_tools:
+  - get_chan_structure
+  - get_realtime_quote
+aliases: [背驰, 一买, 一卖, 底背驰, 顶背驰, 抄底, 逃顶]
+default_priority: 20
+market_regimes: [trending_down, volatile]
+
+instructions: |
+  **缠论背驰转折（一买 / 一卖）**
+
+  只依据缠论结构快照中的 `divergence` 与类型为 `1B` / `1S` 的 `buy_sell_points`。
+
+  判断要点：
+  1. **先看有没有**：操作级别（D）没有 `1B`/`1S` 且 `divergence.present=false` 时，直接结论“本策略无信号”。
+  2. **区分成色**：`basis=trend_divergence`（两个同向中枢后的趋势背驰）可信度高；
+     `basis=range_divergence`（盘整背驰）只算反弹/回调级别，目标看回中枢，仓位减半。
+  3. **确认优先**：`confirmed=false` 表示这一笔还没走完，可能继续创新低/新高，只能列为“观察条件”，
+     等待小级别（60M/30M）出现同向买卖点或分型确认后再执行。
+  4. **力度**：`strength_ratio` 越小背驰越明显；接近 1 说明力度衰减有限，降低置信度。
+  5. **失效**：一买的 `invalidation_price` 即一买低点，跌破即判定背驰失败，必须止损；一卖对称。
+  6. **级别配合**：周线仍在下跌笔中而日线出一买，只按日线反弹对待；周线同时底背驰才提升为中线机会。
+
+  评分调整建议：
+  - 已确认的趋势背驰一买且仍有效：`sentiment_score +15`
+  - 盘整背驰一买或未确认的一买：`sentiment_score +6`
+  - 已确认的一卖且仍有效：`sentiment_score -15`
+  - 买点失效（`still_valid=false`）：`sentiment_score -10`

@@ -20,7 +20,7 @@ Usage::
 
     from src.agent.factory import build_agent_executor
 
-    executor = build_agent_executor(config, skills=["bull_trend", "shrink_pullback"])
+    executor = build_agent_executor(config, skills=["chan_theory", "chan_third_buy"])
     result   = executor.chat(message="...", session_id="...")
 """
 
@@ -196,25 +196,29 @@ def _resolve_selected_skill_ids(
     return list(default_skills), False
 
 
+# Built-in strategy that implicit default runs fall back to (strategies/chan_theory.yaml).
+_BUILTIN_DEFAULT_SKILL_ID = "chan_theory"
+
+
 def _should_use_legacy_default_prompt(
     *,
     skills_to_activate: List[str],
     explicit_skill_selection: bool,
     skill_catalog: List[object],
 ) -> bool:
-    """Keep the legacy prompt only for the implicit built-in bull_trend fallback."""
-    if explicit_skill_selection or skills_to_activate != ["bull_trend"]:
+    """Keep the legacy prompt only for the implicit built-in default-skill fallback."""
+    if explicit_skill_selection or skills_to_activate != [_BUILTIN_DEFAULT_SKILL_ID]:
         return False
 
-    bull_trend_skill = next(
+    default_skill = next(
         (
             skill
             for skill in skill_catalog
-            if str(getattr(skill, "name", "")).strip() == "bull_trend"
+            if str(getattr(skill, "name", "")).strip() == _BUILTIN_DEFAULT_SKILL_ID
         ),
         None,
     )
-    return getattr(bull_trend_skill, "source", None) == "builtin"
+    return getattr(default_skill, "source", None) == "builtin"
 
 
 def _coerce_config_timeout(config, field_name: str) -> float:

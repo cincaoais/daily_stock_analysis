@@ -4096,7 +4096,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "AGENT_SKILLS": {
         "title": "Agent Strategies",
-        "description": "Comma-separated list of active agent strategy skills. Leave empty to use the primary default strategy skill declared in metadata (built-in default: bull_trend). When set to specific skills (not 'all'), scheduled tasks will automatically use the Agent pipeline.",
+        "description": "Comma-separated list of active agent strategy skills. Leave empty to use the primary default strategy skill declared in metadata (built-in default: chan_theory). When set to specific skills (not 'all'), scheduled tasks will automatically use the Agent pipeline.",
         "category": "agent",
         "data_type": "string",
         "ui_control": "text",
@@ -4110,7 +4110,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "help_key": "settings.agent.AGENT_SKILLS",
         "examples": [
             "AGENT_SKILLS=",
-            "AGENT_SKILLS=bull_trend,mean_reversion",
+            "AGENT_SKILLS=chan_theory,chan_third_buy",
             "AGENT_SKILLS=all",
         ],
         "docs": [

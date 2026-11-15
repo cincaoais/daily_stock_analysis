@@ -920,7 +920,7 @@ const settingsHelpZhCN: SettingsHelpMap = {
   'settings.agent.AGENT_SKILLS': {
     title: 'Agent 策略列表',
     summary: '指定 Agent 使用的策略技能列表。',
-    usage: '使用英文逗号分隔策略名；留空使用默认策略（bull_trend）；设为 all 启用全部策略。',
+    usage: '使用英文逗号分隔策略名；留空使用默认策略（chan_theory）；设为 all 启用全部策略。',
     valueNotes: [
       '设置具体策略（非 all）时，定时任务会自动使用 Agent pipeline。',
       '可用策略取决于 strategies/ 目录中的定义文件。',
@@ -2153,7 +2153,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.agent.AGENT_SKILLS': {
     title: 'Agent Strategies',
     summary: 'Specifies the list of strategy skills the Agent uses.',
-    usage: 'Use comma-separated strategy names. Leave empty for the default (bull_trend). Set to all to enable all strategies.',
+    usage: 'Use comma-separated strategy names. Leave empty for the default (chan_theory). Set to all to enable all strategies.',
     valueNotes: [
       'Setting specific strategies (not all) makes scheduled tasks automatically use the Agent pipeline.',
       'Available strategies depend on the definition files in the strategies/ directory.',

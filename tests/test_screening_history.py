@@ -641,10 +641,10 @@ class ScreeningHistoryTestCase(unittest.TestCase):
     def test_screening_strategies_declare_dsa_analysis_skill_handoffs(self) -> None:
         strategies = {item.name: item for item in list_strategies()}
 
-        self.assertEqual(strategies["volume_breakout"].analysis_skills, ["volume_breakout"])
+        self.assertEqual(strategies["volume_breakout"].analysis_skills, ["chan_third_buy"])
         self.assertEqual(
             strategies["capital_heat"].analysis_skills,
-            ["hot_theme", "emotion_cycle"],
+            ["chan_multi_level"],
         )
 
     def test_fresh_post_rank_context_includes_dsa_events(self) -> None:

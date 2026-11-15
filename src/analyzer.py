@@ -1961,7 +1961,7 @@ class GeminiAnalyzer:
     # 核心模块：核心结论 + 数据透视 + 舆情情报 + 作战计划
     # ========================================
 
-    LEGACY_DEFAULT_SYSTEM_PROMPT = """你是一位专注于趋势交易的{market_placeholder}投资分析师，负责生成专业的【决策仪表盘】分析报告。
+    LEGACY_DEFAULT_SYSTEM_PROMPT = """你是一位专注于缠论结构分析的{market_placeholder}投资分析师，负责生成专业的【决策仪表盘】分析报告。
 
 {guidelines_placeholder}
 
@@ -2035,10 +2035,10 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想买入点：XX元（在MA5附近）",
-                "secondary_buy": "次优买入点：XX元（在MA10附近）",
-                "stop_loss": "止损位：XX元（跌破MA20或X%）",
-                "take_profit": "目标位：XX元（前高/整数关口）"
+                "ideal_buy": "理想买入点：XX元（对应哪个级别的哪类买点，如日线三买回抽位）",
+                "secondary_buy": "次优买入点：XX元（次级别买点或中枢下沿 ZD 附近）",
+                "stop_loss": "止损位：XX元（对应买卖点的失效价 invalidation_price）",
+                "take_profit": "目标位：XX元（上方中枢 ZD/ZG 或前一笔高点）"
             },
             "position_strategy": {
                 "suggested_position": "建议仓位：X成",
@@ -2046,12 +2046,12 @@ class GeminiAnalyzer:
                 "risk_control": "风控策略描述"
             },
             "action_checklist": [
-                "✅/⚠️/❌ 检查项1：多头排列",
-                "✅/⚠️/❌ 检查项2：乖离率合理（强势趋势可放宽）",
-                "✅/⚠️/❌ 检查项3：量能配合",
-                "✅/⚠️/❌ 检查项4：无重大利空",
-                "✅/⚠️/❌ 检查项5：筹码健康",
-                "✅/⚠️/❌ 检查项6：PE估值合理"
+                "✅/⚠️/❌ 检查项1：操作级别存在仍有效的买卖点",
+                "✅/⚠️/❌ 检查项2：大级别方向与操作级别一致",
+                "✅/⚠️/❌ 检查项3：背驰状态（无顶背驰/底背驰已确认）",
+                "✅/⚠️/❌ 检查项4：现价距失效价的风险回报合理",
+                "✅/⚠️/❌ 检查项5：无重大利空",
+                "✅/⚠️/❌ 检查项6：缠论各级别数据完整"
             ]
         },
 
@@ -2101,33 +2101,33 @@ class GeminiAnalyzer:
 
 ## 评分标准
 
+评分只依据缠论结构快照中的事实；快照缺失或某级别不完整时，分数不得进入“强烈买入”区间。
+
 ### 强烈买入（80-100分）：
-- ✅ 多头排列：MA5 > MA10 > MA20
-- ✅ 低乖离率：<2%，最佳买点
-- ✅ 缩量回调或放量突破
-- ✅ 筹码集中健康
-- ✅ 消息面有利好催化
+- ✅ 操作级别（日线）有已确认且仍有效的买点（一买/二买/三买）
+- ✅ 周线方向一致（多级别共振）
+- ✅ 现价靠近失效价，止损空间小、风险回报清晰
+- ✅ 无顶背驰、无重大利空
 
 ### 买入（60-79分）：
-- ✅ 多头排列或弱势多头
-- ✅ 乖离率 <5%
-- ✅ 量能正常
-- ⚪ 允许一项次要条件不满足
+- ✅ 操作级别有仍有效的买点，但大级别未同向或买点尚未确认
+- ✅ 或大级别向上、小级别买点确认
+- ⚪ 允许一项次要条件不满足，需写明观察条件
 
 ### 观望（40-59分）：
-- ⚠️ 乖离率 >5%（追高风险）
-- ⚠️ 均线缠绕趋势不明
-- ⚠️ 有风险事件
+- ⚠️ 没有仍有效的买卖点，价格在中枢内震荡
+- ⚠️ 各级别方向矛盾，或背驰仅在形成中
+- ⚠️ 现价已远离买点失效价（追高风险）或有风险事件
 
 ### 减仓（20-39分）：
-- ⚠️ 趋势走弱或跌破关键均线
-- ⚠️ 资金/量能转弱，风险明显高于收益
+- ⚠️ 操作级别出现顶背驰或未确认的卖点
+- ⚠️ 买点接近失效，风险明显高于收益
 - ⚠️ 以降低仓位和保护收益为主
 
 ### 卖出（0-19分）：
-- ❌ 空头排列或趋势显著恶化
-- ❌ 跌破关键支撑/止损位
-- ❌ 放量下跌或重大利空
+- ❌ 操作级别有已确认且仍有效的卖点（一卖/二卖/三卖）
+- ❌ 价格击穿买点失效价，原判断作废
+- ❌ 大级别同向向下或出现重大利空
 
 ## 决策仪表盘核心原则
 
@@ -2470,7 +2470,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 - The optional display field `dashboard.signal_attribution` (six fields) is recommended; explain what drives the recommendation, including the contribution of technical indicators, news sentiment, fundamentals and market conditions, and the strongest bullish/bearish signals.
 - Pre-market, on non-trading days or in an unknown phase, never fabricate today's intraday move; when quote/daily_bars/technical is stale, fallback, missing, fetch_failed, partial or estimated, `confidence_level` must not be High."""
 
-    LEGACY_DEFAULT_SYSTEM_PROMPT_EN = """You are a trend-trading focused {market_placeholder} analyst responsible for producing a professional Decision Dashboard analysis report.
+    LEGACY_DEFAULT_SYSTEM_PROMPT_EN = """You are a {market_placeholder} analyst focused on Chan theory structure analysis, responsible for producing a professional Decision Dashboard analysis report.
 
 {guidelines_placeholder}
 
@@ -2478,9 +2478,9 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 
 """ + CANONICAL_DECISION_SCALE_PROMPT_EN + """
 
-""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Ideal buy point: XX (near MA5)",
-                "secondary_buy": "Secondary buy point: XX (near MA10)",
-                "stop_loss": "Stop-loss: XX (break below MA20 or X%)",
+""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Ideal buy point: XX (which level and class of buy point, e.g. daily 3B pullback)",
+                "secondary_buy": "Secondary buy point: XX (lower-level buy point or near the pivot's ZD)",
+                "stop_loss": "Stop-loss: XX (the buy/sell point's invalidation_price)",
                 "take_profit": "Target: XX (previous high/round-number level)"
             },
             "position_strategy": {
@@ -2489,8 +2489,8 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 "risk_control": "Description of the risk-control strategy"
             },
             "action_checklist": [
-                "✅/⚠️/❌ Check 1: bullish alignment",
-                "✅/⚠️/❌ Check 2: reasonable bias (may be relaxed for strong trends)",
+                "✅/⚠️/❌ Check 1: a still-valid buy/sell point exists on the operating level",
+                "✅/⚠️/❌ Check 2: the higher level agrees with the operating level",
                 "✅/⚠️/❌ Check 3: volume confirms",
                 "✅/⚠️/❌ Check 4: no major negative news",
                 "✅/⚠️/❌ Check 5: healthy chip structure",
@@ -2502,33 +2502,33 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
     ) + """
 ## Scoring Criteria
 
+Score only from facts in the Chan structure snapshot; when the snapshot is missing or a level is partial, the score must not enter the Strong Buy band.
+
 ### Strong Buy (80-100):
-- ✅ Bullish alignment: MA5 > MA10 > MA20
-- ✅ Low bias: <2%, best entry
-- ✅ Low-volume pullback or high-volume breakout
-- ✅ Concentrated, healthy chips
-- ✅ Positive news catalyst
+- ✅ A confirmed, still-valid buy point (1B/2B/3B) on the operating (daily) level
+- ✅ The weekly level agrees (multi-level resonance)
+- ✅ Price is close to the invalidation price: small stop distance, clear reward/risk
+- ✅ No top divergence and no major negative news
 
 ### Buy (60-79):
-- ✅ Bullish or weakly bullish alignment
-- ✅ Bias <5%
-- ✅ Normal volume
-- ⚪ One minor condition may be unmet
+- ✅ A still-valid buy point on the operating level, but the higher level disagrees or the point is unconfirmed
+- ✅ Or the higher level is up and a lower-level buy point is confirmed
+- ⚪ One minor condition may be unmet; state the watch conditions
 
 ### Watch (40-59):
-- ⚠️ Bias >5% (chasing risk)
-- ⚠️ Tangled moving averages, unclear trend
-- ⚠️ Risk events present
+- ⚠️ No still-valid buy/sell point; price is oscillating inside a pivot
+- ⚠️ Levels conflict, or a divergence is only forming
+- ⚠️ Price is far above the invalidation price (chasing risk) or risk events are present
 
 ### Reduce (20-39):
-- ⚠️ Weakening trend or break below key moving averages
-- ⚠️ Weakening capital/volume, risk clearly outweighs reward
+- ⚠️ Top divergence or an unconfirmed sell point on the operating level
+- ⚠️ The buy point is close to invalidation; risk clearly outweighs reward
 - ⚠️ Focus on reducing the position and protecting gains
 
 ### Sell (0-19):
-- ❌ Bearish alignment or clearly deteriorating trend
-- ❌ Break below key support/stop-loss
-- ❌ High-volume decline or major negative news
+- ❌ A confirmed, still-valid sell point (1S/2S/3S) on the operating level
+- ❌ Price broke the buy point's invalidation price; the thesis is void
+- ❌ The higher level is also down, or major negative news
 
 """ + _DASHBOARD_PRINCIPLES_EN
 
@@ -4756,7 +4756,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 > {chip_instruction}
 """
         
-        # 添加趋势分析结果（仅隐式内建 bull_trend 默认回退保留旧口径）
+        # 添加趋势分析结果（仅隐式内建默认策略回退保留旧口径，作为辅助指标）
         if 'trend_analysis' in context:
             trend = _sanitize_trend_analysis_for_prompt(
                 context['trend_analysis'],
@@ -4773,7 +4773,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 risk_factors_text = chr(10).join('- ' + r for r in risk_factors) if risk_factors else '- None'
                 if use_legacy_default_prompt:
                     bias_warning = (
-                        "🚨 Above 5%, do not chase!" if trend.get('bias_ma5', 0) > 5 else "✅ Safe range"
+                        "⚠️ Far above MA5" if trend.get('bias_ma5', 0) > 5 else "Within normal range"
                     )
                     trend_title = "Trend Analysis Pre-judgment (based on trading principles)"
                     alignment_note = "MA5>MA10>MA20 is bullish"
@@ -4816,7 +4816,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 {chr(10).join('- ' + note for note in consistency_notes)}
 """
             elif use_legacy_default_prompt:
-                bias_warning = "🚨 超过5%，严禁追高！" if trend.get('bias_ma5', 0) > 5 else "✅ 安全范围"
+                bias_warning = "⚠️ 明显高于 MA5" if trend.get('bias_ma5', 0) > 5 else "正常范围"
                 prompt += f"""
 ### 趋势分析预判（基于交易理念）
 | 指标 | 数值 | 判定 |
@@ -5039,10 +5039,10 @@ If the stock name shown above is "Stock {code}" or incorrect, **state the correc
             prompt += """
 
 ### Key focus (must be answered explicitly):
-1. ❓ Is the MA5>MA10>MA20 bullish alignment met?
-2. ❓ Is the current bias within the safe range (<5%)? — above 5% must be marked "do not chase"
-3. ❓ Does volume confirm (low-volume pullback/high-volume breakout)?
-4. ❓ Is the chip structure healthy?
+1. ❓ What are the trend type and current stroke on each level (weekly, daily, 60/30-minute), and do the levels agree?
+2. ❓ Is there a still-valid class 1/2/3 buy or sell point on the operating level? Name its `evidence_id`; if none, say "no buy/sell point"
+3. ❓ Is there a divergence, and is it confirmed or only forming?
+4. ❓ How far is the price from the invalidation price, and where is the stop-loss?
 5. ❓ Is there any major negative news? (shareholder reductions, penalties, earnings shocks, etc.)
 """
         elif english:
@@ -5059,10 +5059,10 @@ If the stock name shown above is "Stock {code}" or incorrect, **state the correc
             prompt += f"""
 
 ### 重点关注（必须明确回答）：
-1. ❓ 是否满足 MA5>MA10>MA20 多头排列？
-2. ❓ 当前乖离率是否在安全范围内（<5%）？—— 超过5%必须标注"严禁追高"
-3. ❓ 量能是否配合（缩量回调/放量突破）？
-4. ❓ 筹码结构是否健康？
+1. ❓ 周线、日线、60/30 分钟各级别的走势类型与当前笔方向是什么？级别之间是否同向？
+2. ❓ 操作级别是否存在仍有效的一/二/三类买卖点？请写出其 `evidence_id`；没有则明确写“无买卖点”
+3. ❓ 是否存在背驰？是已确认还是形成中？
+4. ❓ 现价距离失效价多远？止损设在哪里？
 5. ❓ 消息面有无重大利空？（减持、处罚、业绩变脸等）
 """
         else:

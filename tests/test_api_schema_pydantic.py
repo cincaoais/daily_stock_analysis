@@ -107,7 +107,7 @@ def test_schema_examples_remain_in_openapi_schema() -> None:
     assert root_schema["properties"]["message"]["example"] == "Daily Stock Analysis API is running"
     assert root_schema["example"]["version"] == "1.0.0"
     assert analyze_schema["properties"]["stock_code"]["example"] == "600519"
-    assert analyze_schema["properties"]["skills"]["example"] == ["bull_trend", "growth_quality"]
+    assert analyze_schema["properties"]["skills"]["example"] == ["chan_theory", "chan_third_buy"]
     assert analyze_schema["properties"]["analysis_phase"]["default"] == "auto"
     assert analyze_schema["properties"]["analysis_phase"]["enum"] == [
         "auto",

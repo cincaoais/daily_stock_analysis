@@ -90,7 +90,7 @@ class AnalyzeRequest(BaseModel):
         None,
         validation_alias=AliasChoices("skills", "strategies"),
         description="本次分析使用的策略 skill ID 列表；兼容 legacy strategies 字段",
-        json_schema_extra={"example": ["bull_trend", "growth_quality"]},
+        json_schema_extra={"example": ["chan_theory", "chan_third_buy"]},
     )
 
     model_config = ConfigDict(json_schema_extra={
@@ -105,7 +105,7 @@ class AnalyzeRequest(BaseModel):
             "selection_source": "autocomplete",
             "notify": True,
             "report_language": "zh",
-            "skills": ["bull_trend"]
+            "skills": ["chan_theory"]
         }
     })
 
@@ -371,7 +371,7 @@ class TaskStatus(BaseModel):
             "original_query": "茅台",
             "selection_source": "autocomplete",
             "analysis_phase": "auto",
-            "skills": ["bull_trend"]
+            "skills": ["chan_theory"]
         }
     })
 
@@ -428,7 +428,7 @@ class TaskInfo(BaseModel):
             "original_query": "茅台",
             "selection_source": "autocomplete",
             "analysis_phase": "auto",
-            "skills": ["bull_trend"]
+            "skills": ["chan_theory"]
         }
     })
 

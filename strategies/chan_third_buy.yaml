@@ -1,0 +1,32 @@
+# Chan third buy/sell / 缠论三买三卖（中枢突破回踩）
+
+name: chan_third_buy
+display_name: 缠论三买三卖
+description: 离开中枢后的回抽不回到中枢内形成三买（向下则为三卖），用于确认趋势延续的顺势介入或止损离场。
+category: trend
+core_rules: [1, 2, 3, 5, 6]
+required_tools:
+  - get_chan_structure
+  - get_realtime_quote
+aliases: [三买, 三卖, 中枢突破, 突破回踩, 趋势延续]
+default_priority: 40
+market_regimes: [trending_up]
+
+instructions: |
+  **缠论三买 / 三卖**
+
+  只使用缠论结构快照中类型为 `3B` / `3S` 的 `buy_sell_points`（`basis=pivot_exit`）。
+
+  判断要点：
+  1. 三买的定义是“向上离开中枢后，回抽的低点不跌回中枢上沿 ZG”。`invalidation_price` 就是该中枢的 ZG。
+  2. 现价距离 `invalidation_price` 越近，止损空间越小，盈亏比越好；已经远离时提示等待下一次回抽，不追高。
+  3. 三买之后若出现顶背驰（`divergence.type=top`）或同级别一卖，说明这一段上涨可能结束，应减仓而不是加仓。
+  4. `trend_type=up` 且周线同向时，三买是趋势延续信号；`trend_type=consolidation` 时三买可能演变为更大的中枢，仓位减半。
+  5. 三卖对称：向下离开中枢后反弹不回 ZD，是必须离场的信号，持仓者不要等待“再看看”。
+  6. `still_valid=false` 的三买表示价格已跌回中枢，原上涨假设作废，按中枢震荡处理。
+
+  评分调整建议：
+  - 仍有效的三买且趋势向上：`sentiment_score +12`
+  - 仍有效的三买但出现未确认顶背驰：`sentiment_score +4`
+  - 三买失效跌回中枢：`sentiment_score -8`
+  - 仍有效的三卖：`sentiment_score -15`

@@ -201,7 +201,7 @@ class EnglishStockPromptTemplateTestCase(unittest.TestCase):
         self.assertIn("# 决策仪表盘分析请求", prompt)
         self.assertIn("## 📈 技术面数据", prompt)
         self.assertIn("1.23 亿股", prompt)
-        self.assertIn("专注于趋势交易", system_prompt)
+        self.assertIn("专注于缠论结构分析", system_prompt)
         self.assertNotIn("Decision Dashboard", system_prompt)
 
     def test_english_audit_markers_match_english_prompt_headers(self) -> None:

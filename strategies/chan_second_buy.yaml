@@ -1,0 +1,32 @@
+# Chan second buy/sell / 缠论二买二卖
+
+name: chan_second_buy
+display_name: 缠论二买二卖
+description: 一买之后第一次回抽不破前低形成二买（一卖之后反弹不过前高形成二卖），用于比一买更稳妥的介入或离场。
+category: pattern
+core_rules: [1, 2, 3, 5, 6]
+required_tools:
+  - get_chan_structure
+  - get_realtime_quote
+aliases: [二买, 二卖, 回抽确认, 二次探底]
+default_priority: 30
+market_regimes: [sideways, trending_down]
+
+instructions: |
+  **缠论二买 / 二卖**
+
+  只使用缠论结构快照中类型为 `2B` / `2S` 的 `buy_sell_points`（`basis` 为 `after_1B` / `after_1S`）。
+
+  判断要点：
+  1. 二买必须在一买之后出现：回调这一笔的低点高于一买低点。快照没有 `2B` 就写“尚无二买”。
+  2. `confirmed=false` 的二买表示回调笔仍在进行，先给出“不破 `invalidation_price` 且出现小级别买点再介入”的条件。
+  3. 止损放在 `invalidation_price`（即一买低点）下方，跌破说明一买失败、二买不成立。
+  4. 二买与三买在同一位置出现（同一 `dt` 既有 `2B` 又有 `3B`）是强势信号，可提高仓位。
+  5. 二卖对称：一卖后的反弹高点低于一卖高点，是持仓者的减仓/离场位置。
+  6. 大级别（W）处于下跌且无背驰时，日线二买只做反弹，目标先看最近中枢的 ZD。
+
+  评分调整建议：
+  - 已确认且仍有效的二买：`sentiment_score +12`
+  - 二买与三买重合：`sentiment_score +15`
+  - 未确认的二买：`sentiment_score +5`
+  - 已确认且仍有效的二卖：`sentiment_score -12`

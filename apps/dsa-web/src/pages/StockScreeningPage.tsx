@@ -1161,7 +1161,7 @@ const StockScreeningPage: React.FC = () => {
         stockName,
         autoAnalyze: true,
         selectionSource: 'screening_hotspot',
-        skills: ['hot_theme'],
+        skills: ['chan_multi_level'],
       },
     });
   }, [navigate]);

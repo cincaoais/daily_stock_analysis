@@ -1,0 +1,31 @@
+# Chan pivot oscillation / 缠论中枢震荡
+
+name: chan_zhongshu_oscillation
+display_name: 缠论中枢震荡
+description: 价格在中枢区间内来回震荡时，按中枢上下沿做高抛低吸或保持观望，并等待离开中枢的方向选择。
+category: pattern
+core_rules: [1, 2, 3, 5]
+required_tools:
+  - get_chan_structure
+  - get_realtime_quote
+aliases: [中枢震荡, 箱体, 区间震荡, 高抛低吸]
+default_priority: 50
+market_regimes: [sideways]
+
+instructions: |
+  **缠论中枢震荡**
+
+  适用于缠论结构快照中操作级别 `position_vs_last_zhongshu=inside` 或 `trend_type=consolidation` 的情况。
+
+  判断要点：
+  1. 写明最近中枢的 ZD、ZG 以及波动极值 DD、GG（来自 `zhongshu` 最后一项）。
+  2. 中枢内没有方向：靠近 ZD/DD 且小级别（60M/30M）出现买点才考虑低吸，靠近 ZG/GG 且小级别出现卖点则减仓。
+     价格在中枢中部时结论为“观望”。
+  3. 震荡操作的止损放在 DD 下方（做多）；跌破 DD 且反弹不回 ZD 即形成三卖，震荡假设作废。
+  4. 向上离开中枢后关注是否形成三买；未形成前不要把突破当成趋势。
+  5. 中枢延伸越久（`stroke_count` 越大），离开后的走势通常越大，但方向只能等离开后确认，不能预测。
+
+  评分调整建议：
+  - 中枢下沿附近且小级别出现有效买点：`sentiment_score +6`
+  - 中枢中部无信号：`sentiment_score 维持基准`
+  - 中枢上沿附近且小级别出现有效卖点：`sentiment_score -6`
