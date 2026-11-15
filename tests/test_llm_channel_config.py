@@ -1188,6 +1188,35 @@ class LLMChannelConfigTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_surplus_channel_routes_slash_free_models_through_openai_gateway(
+        self, _mock_parse_yaml, _mock_setup_env
+    ) -> None:
+        base_url = "https://api.surplusintelligence.ai/v1"
+        env = {
+            "LLM_CHANNELS": "surplus",
+            "LLM_SURPLUS_BASE_URL": base_url,
+            "LLM_SURPLUS_API_KEY": "inf_test-value",
+            "LLM_SURPLUS_MODELS": "gpt-6.1-sol,deepseek-v4-flash,claude-opus-4.8",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        # Vendor-looking IDs (deepseek-*, claude-*) must stay on the gateway
+        # instead of being rerouted to the direct DeepSeek / Anthropic providers.
+        self.assertEqual(
+            config.llm_channels[0]["models"],
+            ["openai/gpt-6.1-sol", "openai/deepseek-v4-flash", "openai/claude-opus-4.8"],
+        )
+        self.assertEqual(config.llm_models_source, "llm_channels")
+        self.assertEqual(config.litellm_model, "openai/gpt-6.1-sol")
+        self.assertTrue(config.llm_model_list)
+        for deployment in config.llm_model_list:
+            self.assertEqual(deployment["litellm_params"]["api_base"], base_url)
+            self.assertEqual(deployment["litellm_params"]["api_key"], "inf_test-value")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
     @patch("src.services.system_config_service.requests.get")
     def test_requesty_discovered_models_save_and_route_through_gateway(
         self, mock_get, _mock_parse_yaml, _mock_setup_env

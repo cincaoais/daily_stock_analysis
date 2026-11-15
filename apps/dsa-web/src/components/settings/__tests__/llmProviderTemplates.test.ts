@@ -37,6 +37,7 @@ describe('llmProviderTemplates', () => {
       'siliconflow',
       'openrouter',
       'requesty',
+      'surplus',
       'gemini',
       'anthropic',
       'openai',
@@ -124,6 +125,7 @@ describe('llmProviderTemplates', () => {
     expect(LLM_PROVIDER_TEMPLATE_BY_ID.siliconflow.configHint).toContain('API Key');
     expect(LLM_PROVIDER_TEMPLATE_BY_ID.openrouter.configHint).toContain('API Key');
     expect(LLM_PROVIDER_TEMPLATE_BY_ID.requesty.configHint).toContain('API Key');
+    expect(LLM_PROVIDER_TEMPLATE_BY_ID.surplus.configHint).toContain('测试连接');
     expect(LLM_PROVIDER_TEMPLATE_BY_ID.openai.configHint).toBeUndefined();
   });
 

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] 新增 Surplus Intelligence（OpenAI-compatible 推理市场）LLM 渠道预设：Web 设置页模板、`.env.example` 示例、`00-daily-analysis.yml` 的 `LLM_SURPLUS_*` 映射与配置说明；模型目录 ID 不含斜杠，按 `openai/<model>` 路由。
+
 - [修复] 实时行情基准仅接受同交易日的有效日期；Yahoo 行情使用未复权价格并区分交易日与更新时间，避免除息日涨跌方向错误及误报过期。
 
 - [修复] 盘中及盘后实时行情覆盖前，仅在报价有明确行情交易日证据时将历史 `today` 平移为 `yesterday`；缺少行情时间的港股缓存报价保留原基准，避免涨跌幅、成交量比率及行情快照涨跌额被错误重算（#2517）。

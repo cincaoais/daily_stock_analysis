@@ -188,6 +188,20 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
     ],
   },
   {
+    channelId: 'surplus',
+    label: 'Surplus Intelligence',
+    protocol: 'openai',
+    baseUrl: 'https://api.surplusintelligence.ai/v1',
+    placeholderModels: 'gpt-6.1-sol,deepseek-v4-flash,claude-opus-4.8',
+    capabilities: ['openai-compatible', 'aggregator', 'model-discovery'],
+    configHint:
+      '推理市场按可用 seller 路由，tools / vision / JSON 能力取决于被路由的 seller 与模型。「获取模型」接口免鉴权，成功不代表 API Key 有效，保存前请用「测试连接」验证。',
+    officialSources: [
+      { label: 'Surplus Intelligence Docs', url: 'https://www.surplusintelligence.ai/docs' },
+      { label: 'Surplus Intelligence llms.txt', url: 'https://www.surplusintelligence.ai/llms.txt' },
+    ],
+  },
+  {
     channelId: 'gemini',
     label: 'Gemini 官方',
     protocol: 'gemini',

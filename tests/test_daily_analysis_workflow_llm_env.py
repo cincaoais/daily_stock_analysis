@@ -25,6 +25,7 @@ EXPECTED_TEMPLATE_CHANNELS = {
     "siliconflow",
     "openrouter",
     "requesty",
+    "surplus",
     "gemini",
     "anthropic",
     "openai",
