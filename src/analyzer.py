@@ -81,6 +81,7 @@ from src.llm.provider_cache import (
 from src.llm.response_content import strip_leading_think_wrapper
 from src.storage import persist_llm_usage
 from src.data.stock_mapping import STOCK_NAME_MAP
+from src.chan.service import format_chan_prompt_section
 from src.report_language import (
     get_signal_level,
     get_no_data_text,
@@ -4875,6 +4876,9 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 {chr(10).join('- ' + note for note in consistency_notes)}
 """
         
+        # 添加缠论结构快照（代码计算的笔/中枢/背驰/买卖点）
+        prompt += format_chan_prompt_section(context.get('chan_snapshot'), report_language)
+
         # 添加昨日对比数据
         if 'yesterday' in context:
             volume_change = context.get('volume_change_ratio', 'N/A')

@@ -27,6 +27,7 @@ class TechnicalAgent(BaseAgent):
         "get_realtime_quote",
         "get_daily_history",
         "analyze_trend",
+        "get_chan_structure",
         "calculate_ma",
         "get_volume_analysis",
         "analyze_pattern",

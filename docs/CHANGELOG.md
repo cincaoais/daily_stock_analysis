@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] 个股分析接入缠论结构快照：分析流程通过 `get_kline_data` 拉取周线/日线/60 分钟/30 分钟 K 线，由 `src/chan` 计算笔、中枢、背驰与一二三类买卖点后注入默认分析提示词、单 Agent 与多 Agent 上下文，并新增 Agent 工具 `get_chan_structure`；可用 `CHAN_ANALYSIS_ENABLED=false` 关闭，`CHAN_TIMEFRAMES` 选择级别（默认 `1w,1d,60m,30m`）。港股/美股在配置 OpenD 时 K 线优先走 Futu / moomoo。
 - [新功能] 新增 Surplus Intelligence（OpenAI-compatible 推理市场）LLM 渠道预设：Web 设置页模板、`.env.example` 示例、`00-daily-analysis.yml` 的 `LLM_SURPLUS_*` 映射与配置说明；模型目录 ID 不含斜杠，按 `openai/<model>` 路由。
 
 - [新功能] Futu / moomoo OpenD 行情扩展到美股并新增多周期 K 线：配置 `FUTU_OPEND_HOST`（或别名 `MOOMOO_OPEND_HOST` / `MOOMOO_OPEND_PORT`）后，港股与美股的实时行情、日线优先走 OpenD，SDK 优先加载 `moomoo` 包、否则回退 `futu`；新增 `DataFetcherManager.get_kline_data()`，支持 `1d` / `1w` / `60m` / `30m`（OpenD 前复权分页，YFinance 兜底）。A 股与美股指数不走 OpenD，未配置端点时行为不变。

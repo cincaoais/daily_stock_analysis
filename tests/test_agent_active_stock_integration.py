@@ -208,6 +208,7 @@ def test_convergence_builtin_asset_contracts_match_actual_factory():
         "get_chip_distribution": ("stock",), "get_analysis_context": ("stock", "index"),
         "get_stock_info": ("stock",), "get_capital_flow": ("stock",),
         "analyze_trend": ("stock", "index"), "calculate_ma": ("stock", "index"),
+        "get_chan_structure": ("stock", "index"),
         "get_volume_analysis": ("stock", "index"), "analyze_pattern": ("stock", "index"),
         "search_stock_news": ("stock", "index"), "search_comprehensive_intel": ("stock", "index"),
         "get_stock_backtest_summary": ("stock",),

@@ -2334,6 +2334,11 @@ class DataFetcherManager:
                 f"{market_label} {stock_code} {timeframe} K线获取失败:\n暂无可用数据源{detail}"
             )
 
+        if market in ("hk", "us"):
+            # A configured OpenD is the primary HK/US K-line source (it is only in
+            # the fetcher list when an endpoint is configured); keep the rest in order.
+            candidates.sort(key=lambda f: f.name != "FutuFetcher")
+
         total = len(candidates)
         request_start = time.time()
         for attempt, fetcher in enumerate(candidates, start=1):

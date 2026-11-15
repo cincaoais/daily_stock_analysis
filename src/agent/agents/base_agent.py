@@ -252,6 +252,12 @@ class BaseAgent(ABC):
         import json
         parts: List[str] = []
         for key, value in ctx.data.items():
+            if key == "chan_snapshot" and isinstance(value, dict):
+                # Rendered with its reading rules and its own size budget.
+                from src.chan.service import format_chan_prompt_section
+
+                parts.append(format_chan_prompt_section(value, "zh").strip())
+                continue
             if value is not None:
                 try:
                     serialised = json.dumps(value, ensure_ascii=False, default=str)

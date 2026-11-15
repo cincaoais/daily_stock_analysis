@@ -1351,6 +1351,9 @@ class Config:
     enable_realtime_technical_indicators: bool = True
     # 筹码分布开关（该接口不稳定，云端部署建议关闭）
     enable_chip_distribution: bool = True
+    # 缠论结构快照：是否计算并注入提示词，以及参与计算的级别
+    chan_analysis_enabled: bool = True
+    chan_timeframes: str = "1w,1d,60m,30m"
     # 东财接口补丁开关
     enable_eastmoney_patch: bool = False
     # 实时行情数据源优先级（逗号分隔）
@@ -2397,6 +2400,8 @@ class Config:
                 'ENABLE_REALTIME_TECHNICAL_INDICATORS', 'true'
             ).lower() == 'true',
             enable_chip_distribution=os.getenv('ENABLE_CHIP_DISTRIBUTION', 'true').lower() == 'true',
+            chan_analysis_enabled=os.getenv('CHAN_ANALYSIS_ENABLED', 'true').lower() == 'true',
+            chan_timeframes=os.getenv('CHAN_TIMEFRAMES', '').strip() or "1w,1d,60m,30m",
             # 东财接口补丁开关
             enable_eastmoney_patch=os.getenv('ENABLE_EASTMONEY_PATCH', 'false').lower() == 'true',
             # 实时行情数据源优先级：

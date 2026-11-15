@@ -904,6 +904,10 @@ class AgentExecutor:
                 parts.append(f"\n[系统已获取的实时行情]\n{json.dumps(context['realtime_quote'], ensure_ascii=False)}")
             if context.get("chip_distribution"):
                 parts.append(f"\n[系统已获取的筹码分布]\n{json.dumps(context['chip_distribution'], ensure_ascii=False)}")
+            if context.get("chan_snapshot"):
+                from src.chan.service import format_chan_prompt_section
+
+                parts.append(format_chan_prompt_section(context["chan_snapshot"], "zh"))
             if context.get("news_context"):
                 parts.append(f"\n[系统已获取的新闻与舆情情报]\n{context['news_context']}")
 

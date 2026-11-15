@@ -659,6 +659,9 @@ class StockAnalysisPipeline:
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 趋势分析失败: {e}", exc_info=True)
 
+            # Step 3.5: 缠论结构快照（代码计算笔/中枢/背驰/买卖点）— Agent 与非 Agent 路径共用
+            chan_snapshot = self._load_chan_snapshot(code, stock_name)
+
             if use_agent:
                 logger.info(f"{stock_name}({code}) 启用 Agent 模式进行分析")
                 self._emit_progress(58, f"{stock_name}：正在切换 Agent 分析链路")
@@ -677,6 +680,7 @@ class StockAnalysisPipeline:
                     portfolio_context=portfolio_context,
                     market_structure_context=market_structure_context,
                     analysis_target=analysis_target,
+                    chan_snapshot=chan_snapshot,
                 )
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
@@ -787,6 +791,8 @@ class StockAnalysisPipeline:
                 portfolio_context=portfolio_context,
             )
             enhanced_context["market_phase_context"] = market_phase_context_dict
+            if chan_snapshot:
+                enhanced_context["chan_snapshot"] = chan_snapshot
             self._attach_daily_market_context(
                 enhanced_context,
                 daily_market_context,
@@ -1496,6 +1502,7 @@ class StockAnalysisPipeline:
         portfolio_context: Optional[Dict[str, Any]] = None,
         market_structure_context: Optional[Dict[str, Any]] = None,
         analysis_target: Optional[AnalysisTarget] = None,
+        chan_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Optional[AnalysisResult]:
         """
         使用 Agent 模式分析单只股票。
@@ -1550,6 +1557,8 @@ class StockAnalysisPipeline:
                 initial_context["chip_distribution"] = self._safe_to_dict(chip_data)
             if trend_result:
                 initial_context["trend_result"] = self._safe_to_dict(trend_result)
+            if chan_snapshot:
+                initial_context["chan_snapshot"] = chan_snapshot
 
             # Agent path: inject social sentiment as news_context so both
             # executor (_build_user_message) and orchestrator (ctx.set_data)
@@ -2794,6 +2803,32 @@ class StockAnalysisPipeline:
             return "短期走弱 🔽"
         else:
             return "震荡整理 ↔️"
+
+    def _load_chan_snapshot(self, code: str, stock_name: str) -> Optional[Dict[str, Any]]:
+        """Compute the Chan structure snapshot; None when disabled or unusable."""
+        if not getattr(self.config, "chan_analysis_enabled", True):
+            return None
+        try:
+            from src.chan.service import load_chan_snapshot
+
+            snapshot = load_chan_snapshot(
+                self.fetcher_manager,
+                code,
+                market=get_market_for_stock(normalize_stock_code(code)),
+                name=stock_name,
+                timeframes=getattr(self.config, "chan_timeframes", None),
+            )
+        except Exception as e:
+            logger.warning(f"{stock_name}({code}) 缠论结构快照失败: {e}", exc_info=True)
+            return None
+        quality = snapshot.get("data_quality", {})
+        logger.info(
+            f"{stock_name}({code}) 缠论结构快照: status={quality.get('status')}, "
+            f"levels={list(snapshot.get('levels', {}))}"
+        )
+        if quality.get("status") == "missing":
+            return None
+        return snapshot
 
     def _augment_historical_with_realtime(
         self,

@@ -524,8 +524,56 @@ analyze_pattern_tool = ToolDefinition(
 )
 
 
+# ============================================================
+# get_chan_structure — Chan theory structure computed in code
+# ============================================================
+
+def _handle_get_chan_structure(stock_code: str, timeframes: Optional[str] = None) -> dict:
+    """Return the compact multi-level Chan structure snapshot for a stock."""
+    from src.agent.tools.data_tools import _get_fetcher_manager
+    from src.chan.service import compact_chan_snapshot, load_chan_snapshot
+
+    if not (stock_code and str(stock_code).strip()):
+        return {"error": "stock_code is required"}
+    snapshot = load_chan_snapshot(_get_fetcher_manager(), str(stock_code).strip(), timeframes=timeframes)
+    if snapshot.get("data_quality", {}).get("status") == "missing":
+        return {
+            "error": f"No usable K-line data for Chan structure of {stock_code}",
+            "warnings": snapshot.get("data_quality", {}).get("warnings", []),
+        }
+    return compact_chan_snapshot(snapshot)
+
+
+get_chan_structure_tool = ToolDefinition(
+    name="get_chan_structure",
+    description="Compute the Chan theory (缠论) structure of a stock in code: strokes (笔), "
+                "pivots (中枢, ZG/ZD), trend type, MACD-area divergence (背驰) and class 1/2/3 "
+                "buy/sell points with invalidation prices, for weekly, daily, 60-minute and "
+                "30-minute levels plus a cross-level summary. Treat the result as the only "
+                "source of structural facts; segments (线段) are not computed.",
+    parameters=[
+        ToolParameter(
+            name="stock_code",
+            type="string",
+            description="Stock code, e.g., 'AAPL', 'HK00700', '600519'",
+        ),
+        ToolParameter(
+            name="timeframes",
+            type="string",
+            description="Optional comma-separated levels among 1w,1d,60m,30m (default: all four)",
+            required=False,
+            default=None,
+        ),
+    ],
+    handler=_handle_get_chan_structure,
+    category="analysis",
+    policy=_ANALYSIS_READ_POLICY,
+)
+
+
 ALL_ANALYSIS_TOOLS = [
     analyze_trend_tool,
+    get_chan_structure_tool,
     calculate_ma_tool,
     get_volume_analysis_tool,
     analyze_pattern_tool,
