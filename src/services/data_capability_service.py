@@ -137,11 +137,11 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
     ),
     _ProviderDefinition(
         name="futu",
-        label="Futu OpenD",
+        label="Futu / moomoo OpenD",
         fetcher_name="FutuFetcher",
         dataset_markets={
-            "quote.realtime": ("hk",),
-            "kline.daily": ("hk",),
+            "quote.realtime": ("hk", "us"),
+            "kline.daily": ("hk", "us"),
             "financial.snapshot": ("hk",),
         },
     ),
@@ -441,7 +441,7 @@ class DataCapabilityService:
                 "us.realtime",
                 self._us_realtime_priority(fetchers),
                 "DataFetcherManager US realtime route",
-                known_sources={"longbridge", "yfinance"},
+                known_sources={"futu", "longbridge", "yfinance"},
             ),
             self._priority_view(
                 "daily.generic",
@@ -498,13 +498,22 @@ class DataCapabilityService:
 
     def _us_realtime_priority(self, fetchers: Sequence[Any]) -> List[str]:
         fetcher_map = {str(getattr(fetcher, "name", "")): fetcher for fetcher in fetchers}
+        futu = fetcher_map.get("FutuFetcher")
+        futu_available = futu is not None and self._fetcher_available_for_capability(
+            futu,
+            capability="realtime_quote",
+        )
         longbridge = fetcher_map.get("LongbridgeFetcher")
-        if longbridge is not None and self._fetcher_available_for_capability(
+        longbridge_available = longbridge is not None and self._fetcher_available_for_capability(
             longbridge,
             capability="realtime_quote",
-        ):
-            return ["longbridge", "yfinance"]
-        return ["yfinance", "longbridge"]
+        )
+        if longbridge_available:
+            chain = ["longbridge", "yfinance"]
+        else:
+            chain = ["yfinance", "longbridge"]
+        # Futu/moomoo is first only when an OpenD endpoint makes it available.
+        return (["futu"] + chain) if futu_available else chain
 
     @staticmethod
     def _priority_view(
@@ -849,14 +858,22 @@ class DataCapabilityService:
             provider
             for fetcher in fetchers
             if (provider := _FETCHER_TO_PROVIDER.get(str(getattr(fetcher, "name", ""))))
-            in {"longbridge", "finnhub", "alphavantage", "yfinance"}
+            in {"futu", "longbridge", "finnhub", "alphavantage", "yfinance"}
             and self._fetcher_available_for_capability(fetcher, capability="daily_data")
         }
-        preferred = (
-            ["longbridge", "finnhub", "alphavantage", "yfinance"]
-            if "longbridge" in available
-            else ["finnhub", "alphavantage", "yfinance", "longbridge"]
-        )
+        if "futu" in available:
+            tail = (
+                ["longbridge", "finnhub", "alphavantage", "yfinance"]
+                if "longbridge" in available
+                else ["finnhub", "alphavantage", "yfinance", "longbridge"]
+            )
+            preferred = ["futu"] + tail
+        else:
+            preferred = (
+                ["longbridge", "finnhub", "alphavantage", "yfinance"]
+                if "longbridge" in available
+                else ["finnhub", "alphavantage", "yfinance", "longbridge"]
+            )
         return [provider for provider in preferred if provider in available]
 
     @staticmethod

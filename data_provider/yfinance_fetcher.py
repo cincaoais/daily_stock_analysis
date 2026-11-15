@@ -16,7 +16,7 @@ YfinanceFetcher - 兜底数据源 (Priority 4)
 
 import csv
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from typing import Optional, List, Dict, Any
 from urllib.error import HTTPError, URLError
@@ -75,6 +75,15 @@ class YfinanceFetcher(BaseFetcher):
 
     name = "YfinanceFetcher"
     priority = int(os.getenv("YFINANCE_PRIORITY", "4"))
+    SUPPORTED_TIMEFRAMES = frozenset({"1d", "1w", "60m", "30m"})
+    _INTERVAL_BY_TIMEFRAME = {
+        "1d": "1d",
+        "1w": "1wk",
+        "60m": "60m",
+        "30m": "30m",
+    }
+    # Yahoo caps intraday history; clamp the window instead of failing.
+    _MAX_INTRADAY_DAYS = {"30m": 58, "60m": 728}  # Yahoo rejects exactly 60 / 730 days
 
     def __init__(self):
         """初始化 YfinanceFetcher"""
@@ -187,7 +196,13 @@ class YfinanceFetcher(BaseFetcher):
         retry=retry_if_exception_type((ConnectionError, TimeoutError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
-    def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def _fetch_raw_data(
+        self,
+        stock_code: str,
+        start_date: str,
+        end_date: str,
+        interval: str = "1d",
+    ) -> pd.DataFrame:
         """
         从 Yahoo Finance 获取原始数据
 
@@ -213,6 +228,7 @@ class YfinanceFetcher(BaseFetcher):
                 end=end_date,
                 progress=False,  # 禁止进度条
                 auto_adjust=True,  # 自动调整价格（复权）
+                interval=interval,
                 multi_level_index=True
             )
 
@@ -304,6 +320,60 @@ class YfinanceFetcher(BaseFetcher):
         df = df[existing_cols]
 
         return df
+
+    def get_kline_data(
+        self,
+        stock_code: str,
+        timeframe: str = "1d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        days: int = 365,
+    ) -> pd.DataFrame:
+        """Fetch Yahoo K-lines for daily/weekly/60m/30m intervals."""
+        if timeframe not in self.SUPPORTED_TIMEFRAMES:
+            raise DataFetchError(f"[{self.name}] 不支持的 timeframe: {timeframe!r}")
+
+        end_dt = (
+            datetime.strptime(end_date, "%Y-%m-%d")
+            if end_date
+            else datetime.now()
+        )
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        else:
+            start_dt = end_dt - timedelta(days=max(int(days), 1) * 2)
+        max_days = self._MAX_INTRADAY_DAYS.get(timeframe)
+        if max_days:
+            earliest = end_dt - timedelta(days=max_days)
+            if start_dt < earliest:
+                start_dt = earliest
+
+        raw = self._fetch_raw_data(
+            stock_code,
+            start_dt.strftime("%Y-%m-%d"),
+            end_dt.strftime("%Y-%m-%d"),
+            interval=self._INTERVAL_BY_TIMEFRAME[timeframe],
+        )
+        if raw is None or raw.empty:
+            return pd.DataFrame(columns=STANDARD_COLUMNS)
+
+        out = self._normalize_data(raw, stock_code)
+        out = out.drop(columns=["code"], errors="ignore")
+        out["date"] = pd.to_datetime(out["date"], errors="coerce")
+        if getattr(out["date"].dt, "tz", None) is not None:
+            out["date"] = out["date"].dt.tz_localize(None)
+        if timeframe in {"1d", "1w"}:
+            out["date"] = out["date"].dt.normalize()
+        for col in ("open", "high", "low", "close", "volume", "amount", "pct_chg"):
+            if col in out.columns:
+                out[col] = pd.to_numeric(out[col], errors="coerce")
+        for col in STANDARD_COLUMNS:
+            if col not in out.columns:
+                out[col] = None
+        out = out[STANDARD_COLUMNS].dropna(subset=["date", "close"])
+        out = out.sort_values("date", kind="stable")
+        out = out.drop_duplicates(subset=["date"], keep="last")
+        return out.reset_index(drop=True)
 
     def _fetch_yf_ticker_data(self, yf, yf_code: str, name: str, return_code: str) -> Optional[Dict[str, Any]]:
         """

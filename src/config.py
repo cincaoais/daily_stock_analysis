@@ -242,6 +242,15 @@ def parse_env_bool(value: Optional[str], default: bool = False) -> bool:
     return normalized not in _FALSEY_ENV_VALUES
 
 
+def _resolve_alias_env(primary: str, *aliases: str) -> Tuple[Optional[str], str]:
+    """Return the first non-empty env value and its name (primary wins)."""
+    for name in (primary, *aliases):
+        value = os.getenv(name)
+        if value is not None and value.strip():
+            return value, name
+    return None, primary
+
+
 def parse_env_int(
     value: Optional[str],
     default: int,
@@ -1929,8 +1938,14 @@ class Config:
             tickflow_priority=parse_env_int(os.getenv('TICKFLOW_PRIORITY'), 2, field_name='TICKFLOW_PRIORITY', minimum=0),
             tickflow_batch_daily_enabled=parse_env_bool(os.getenv('TICKFLOW_BATCH_DAILY_ENABLED'), default=True),
             tickflow_batch_size=parse_env_int(os.getenv('TICKFLOW_BATCH_SIZE'), 100, field_name='TICKFLOW_BATCH_SIZE', minimum=1),
-            futu_opend_host=os.getenv('FUTU_OPEND_HOST') or None,
-            futu_opend_port=parse_env_int(os.getenv('FUTU_OPEND_PORT'), 11111, field_name='FUTU_OPEND_PORT', minimum=1, maximum=65535),
+            futu_opend_host=_resolve_alias_env('FUTU_OPEND_HOST', 'MOOMOO_OPEND_HOST')[0] or None,
+            futu_opend_port=parse_env_int(
+                _resolve_alias_env('FUTU_OPEND_PORT', 'MOOMOO_OPEND_PORT')[0],
+                11111,
+                field_name=_resolve_alias_env('FUTU_OPEND_PORT', 'MOOMOO_OPEND_PORT')[1],
+                minimum=1,
+                maximum=65535,
+            ),
             futu_hk_realtime_source_priority=os.getenv('FUTU_HK_REALTIME_SOURCE_PRIORITY', 'futu,longbridge,akshare,yfinance'),
             mx_apikey=os.getenv('MX_APIKEY') or None,
             mx_priority=parse_env_int(os.getenv('MX_PRIORITY'), 6, field_name='MX_PRIORITY', minimum=0),
