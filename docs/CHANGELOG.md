@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] 新增 Surplus Intelligence（OpenAI-compatible 推理市场）LLM 渠道预设：Web 设置页模板、`.env.example` 示例、`00-daily-analysis.yml` 的 `LLM_SURPLUS_*` 映射与配置说明；模型目录 ID 不含斜杠，按 `openai/<model>` 路由。
 
 - [新功能] Futu / moomoo OpenD 行情扩展到美股并新增多周期 K 线：配置 `FUTU_OPEND_HOST`（或别名 `MOOMOO_OPEND_HOST` / `MOOMOO_OPEND_PORT`）后，港股与美股的实时行情、日线优先走 OpenD，SDK 优先加载 `moomoo` 包、否则回退 `futu`；新增 `DataFetcherManager.get_kline_data()`，支持 `1d` / `1w` / `60m` / `30m`（OpenD 前复权分页，YFinance 兜底）。A 股与美股指数不走 OpenD，未配置端点时行为不变。
+- [新功能] 新增缠论结构引擎 `src/chan`：基于 `czsc` 在代码中计算分型、笔、中枢，并补充 MACD 面积背驰、一二三类买卖点（含失效价）、走势类型、关键价位与多级别（周/日/60 分钟/30 分钟）共振摘要，输出可直接交给 LLM 的 `chan_snapshot/1.0` JSON；线段暂未计算并明确标记为 `not_supported`。本条仅新增引擎，尚未接入分析主流程。
 - [修复] 实时行情基准仅接受同交易日的有效日期；Yahoo 行情使用未复权价格并区分交易日与更新时间，避免除息日涨跌方向错误及误报过期。
 
 - [修复] 盘中及盘后实时行情覆盖前，仅在报价有明确行情交易日证据时将历史 `today` 平移为 `yesterday`；缺少行情时间的港股缓存报价保留原基准，避免涨跌幅、成交量比率及行情快照涨跌额被错误重算（#2517）。
