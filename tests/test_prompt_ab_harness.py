@@ -46,6 +46,12 @@ def test_metrics_flag_invented_numbers_ids_and_unanchored_stops():
     assert scores["stop_anchored"] is False
     assert scores["pass"] is False
 
+    from evals.prompt_ab.metrics import unknown_evidence_ids
+
+    known = {"60M.1S.2026-11-12 09:30", "D.3B.2026-10-20"}
+    assert unknown_evidence_ids({"60M.1S.2026-11-12", "D.3B.2026-10-20"}, known) == []
+    assert unknown_evidence_ids({"60M.1S.2026-11-13"}, known) == ["60M.1S.2026-11-13"]
+
     assert stop_is_anchored("止损 100.5 元", [100.0]) is True
     assert stop_is_anchored("", [100.0]) is None
 

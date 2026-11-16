@@ -34,6 +34,13 @@ def snapshot_evidence_ids(snapshot: Dict[str, Any]) -> Set[str]:
     return ids
 
 
+def unknown_evidence_ids(cited: Iterable[str], known: Set[str]) -> List[str]:
+    """Cited ids not in the snapshot. A date-only form of a known intraday id
+    (``60M.1S.2026-11-12`` for ``60M.1S.2026-11-12 09:30``) counts as known."""
+    date_only = {k.split(" ")[0] for k in known}
+    return sorted(c for c in cited if c not in known and c not in date_only)
+
+
 def _all_text(result: Dict[str, Any]) -> str:
     parts: List[str] = [str(result.get(k) or "") for k in TEXT_FIELDS]
     parts.append(json.dumps(result.get("dashboard") or {}, ensure_ascii=False))
@@ -87,7 +94,7 @@ def score_result(case: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]
         "decision_allowed": None if not allowed else decision in allowed,
         "confidence_not_high": None if not expect.get("confidence_not_high") else confidence not in ("high", "高", "높음"),
         "cites_evidence": bool(cited & known_ids) if known_ids else None,
-        "invented_evidence_ids": sorted(cited - known_ids),
+        "invented_evidence_ids": unknown_evidence_ids(cited, known_ids),
         "invented_probability": bool(_INVENTED_PROB_RE.search(text)),
         "stop_anchored": stop_is_anchored(_stop_loss_text(result), invalidations) if decision == "buy" else None,
         "chan_gate": ((result.get("dashboard") or {}).get("chan_gate") or {}).get("outcome"),
