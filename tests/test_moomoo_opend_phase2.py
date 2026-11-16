@@ -354,20 +354,21 @@ class TestFutuKline:
         assert calls["count"] == _MAX_HISTORY_PAGES
         assert len(df) == _MAX_HISTORY_PAGES
 
-    def test_daily_path_keeps_single_page_none_adjust(self):
-        ctx = _FakeQuoteContext(
-            lambda call, kwargs: (0, _rows("2026-08-24"), "should-not-page")
-        )
-        fetcher = _make_fetcher(self, ctx=ctx)
-        df = fetcher.get_daily_data("AAPL", start_date="2026-01-01", end_date="2026-08-24")
+    def test_daily_path_is_single_page_qfq_for_us_and_unadjusted_for_hk(self):
+        for code, autype in (("AAPL", "QFQ"), ("HK00700", "NONE")):
+            ctx = _FakeQuoteContext(
+                lambda call, kwargs: (0, _rows("2026-08-24"), "should-not-page")
+            )
+            fetcher = _make_fetcher(self, ctx=ctx)
+            df = fetcher.get_daily_data(code, start_date="2026-01-01", end_date="2026-08-24")
 
-        assert not df.empty
-        assert len(ctx.calls) == 1
-        _, kwargs = ctx.calls[0]
-        assert kwargs["ktype"] == "K_DAY"
-        assert kwargs["autype"] == "NONE"
-        assert "page_req_key" not in kwargs
-        assert list(df.columns[: len(STANDARD_COLUMNS)]) == STANDARD_COLUMNS
+            assert not df.empty
+            assert len(ctx.calls) == 1
+            _, kwargs = ctx.calls[0]
+            assert kwargs["ktype"] == "K_DAY"
+            assert kwargs["autype"] == autype, code
+            assert "page_req_key" not in kwargs
+            assert list(df.columns[: len(STANDARD_COLUMNS)]) == STANDARD_COLUMNS
 
     def test_a_share_returns_empty_without_connecting(self):
         fetcher = _make_fetcher(self, ctx=_FakeQuoteContext())

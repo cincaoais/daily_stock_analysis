@@ -1268,10 +1268,11 @@ def enforce_chan_buy_gate(
     """Downgrade buy/add calls the Chan snapshot does not support.
 
     A buy needs a still-valid buy point in state confirmed or candidate on the operating
-    or confirmation level, with price above its invalidation price. When only candidate
-    points support it, confidence is capped at medium. Does nothing without a snapshot
-    (Chan analysis disabled) or when the operating level is unusable, because the
-    prompt already tells the model to lower confidence in that case.
+    or confirmation level, with price above its invalidation price (skipped when the
+    current price is unknown). Unless a confirmed point on the operating level supports
+    it, confidence is capped at medium. Does nothing without a snapshot (Chan analysis
+    disabled) or when no level is usable; if daily is unusable the engine promotes the
+    next usable level to operating.
     """
     if not result or not isinstance(chan_snapshot, dict) or not chan_snapshot.get("levels"):
         return
@@ -1297,10 +1298,10 @@ def enforce_chan_buy_gate(
         if not points:
             reason = _localized_text(
                 language,
-                zh="缠论快照中操作级别没有已确认/候选且仍有效的买点，买入结论缺少结构依据，按观察处理。",
-                en="The Chan snapshot has no still-valid confirmed or candidate buy point on the operating "
-                   "level, so the buy call lacks structural support and is treated as watch-only.",
-                ko="찬 구조 스냅샷의 운용 레벨에 유효한 확정/후보 매수 포인트가 없어 매수 결론을 관찰로 처리합니다.",
+                zh="缠论快照中操作级别和确认级别都没有已确认/候选且仍有效的买点，买入结论缺少结构依据，按观察处理。",
+                en="The Chan snapshot has no still-valid confirmed or candidate buy point on the operating or "
+                   "confirmation level, so the buy call lacks structural support and is treated as watch-only.",
+                ko="찬 구조 스냅샷의 운용·확인 레벨에 유효한 확정/후보 매수 포인트가 없어 매수 결론을 관찰로 처리합니다.",
             )
             no_position = _localized_text(
                 language,
@@ -1333,20 +1334,23 @@ def enforce_chan_buy_gate(
             logger.info("[chan_gate] Downgraded buy without a supporting Chan buy point")
             return
 
-        if all(p.get("state") == "candidate" for p in points):
+        operating = roles.get("operating") or "D"
+        strong = [p for p in points if p.get("state") == "confirmed" and p.get("level", operating) == operating]
+        if not strong:
             if localize_confidence_level(getattr(result, "confidence_level", ""), "en") == "High":
                 result.confidence_level = localize_confidence_level("medium", language)
             note = _localized_text(
                 language,
-                zh="依据的买点仍是候选状态（最新一笔可能被重画），待确认前只宜小仓试探。",
-                en="The supporting buy point is still a candidate (the newest stroke can be redrawn); "
-                   "only a small trial position fits until it is confirmed.",
-                ko="근거 매수 포인트가 아직 후보 상태(최신 획이 다시 그려질 수 있음)이므로 확인 전에는 소량 시험 매수만 적합합니다.",
+                zh="依据的买点尚未在操作级别确认（仍是候选，或只来自确认级别），待确认前只宜小仓试探。",
+                en="The supporting buy point is not confirmed on the operating level (it is still a candidate "
+                   "or comes only from the confirmation level); only a small trial position fits until it is confirmed.",
+                ko="근거 매수 포인트가 운용 레벨에서 아직 확정되지 않았으므로(후보 상태이거나 확인 레벨에서만 나옴) "
+                   "확인 전에는 소량 시험 매수만 적합합니다.",
             )
             if note not in str(result.risk_warning or ""):
                 sep = "；" if language == "zh" else "; "
                 result.risk_warning = f"{result.risk_warning}{sep}{note}" if result.risk_warning else note
-            dashboard["chan_gate"] = {"applied": True, "outcome": "candidate_only", "supporting_points": point_ids}
+            dashboard["chan_gate"] = {"applied": True, "outcome": "unconfirmed_support", "supporting_points": point_ids}
             return
         dashboard["chan_gate"] = {"applied": False, "outcome": "supported", "supporting_points": point_ids}
     except Exception as exc:  # noqa: BLE001 - a guard failure must not drop the report

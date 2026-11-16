@@ -351,7 +351,8 @@ class YfinanceFetcher(BaseFetcher):
         raw = self._fetch_raw_data(
             stock_code,
             start_dt.strftime("%Y-%m-%d"),
-            end_dt.strftime("%Y-%m-%d"),
+            # yfinance treats ``end`` as exclusive; +1 day keeps the end date's own bars.
+            (end_dt + timedelta(days=1)).strftime("%Y-%m-%d"),
             interval=self._INTERVAL_BY_TIMEFRAME[timeframe],
         )
         if raw is None or raw.empty:

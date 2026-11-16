@@ -2407,7 +2407,7 @@ class Config:
                 'ENABLE_REALTIME_TECHNICAL_INDICATORS', 'true'
             ).lower() == 'true',
             enable_chip_distribution=os.getenv('ENABLE_CHIP_DISTRIBUTION', 'true').lower() == 'true',
-            chan_analysis_enabled=os.getenv('CHAN_ANALYSIS_ENABLED', 'true').lower() == 'true',
+            chan_analysis_enabled=parse_env_bool(os.getenv('CHAN_ANALYSIS_ENABLED'), default=True),
             chan_timeframes=os.getenv('CHAN_TIMEFRAMES', '').strip() or "1w,1d,60m,30m",
             # 东财接口补丁开关
             enable_eastmoney_patch=os.getenv('ENABLE_EASTMONEY_PATCH', 'false').lower() == 'true',

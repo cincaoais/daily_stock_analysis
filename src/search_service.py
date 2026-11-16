@@ -2092,6 +2092,10 @@ class SearchService:
             return None
         provider_max_results = self._provider_request_size(max_results)
         prefer_chinese = self._should_prefer_chinese_news(stock_code, stock_name)
+        if prefer_chinese and any(p.is_available for p in self._providers):
+            # Yahoo/Finnhub return English headlines; for stocks that prefer Chinese news,
+            # keep the configured keyword engines first instead of short-circuiting them.
+            return None
         for provider in self._ticker_providers:
             if not provider.is_available:
                 continue

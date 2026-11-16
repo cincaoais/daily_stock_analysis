@@ -432,8 +432,10 @@ class FutuFetcher(BaseFetcher):
             return None
 
     def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-        # Existing daily path: single page, unadjusted prices, K_DAY. Kept
-        # intentionally unchanged; multi-timeframe QFQ lives in get_kline_data.
+        # Existing daily path: single page, K_DAY. HK keeps unadjusted prices as
+        # before; US uses QFQ so it matches the adjusted Yahoo/Finnhub history it
+        # replaced (a split would otherwise break MA windows). Multi-timeframe QFQ
+        # lives in get_kline_data.
         symbol = _opend_symbol(stock_code)
         if not symbol:
             return pd.DataFrame()
@@ -447,7 +449,7 @@ class FutuFetcher(BaseFetcher):
                 start=start_date,
                 end=end_date,
                 ktype=ft.KLType.K_DAY,
-                autype=ft.AuType.NONE,
+                autype=ft.AuType.QFQ if symbol.startswith("US.") else ft.AuType.NONE,
                 max_count=1000,
             )
             if ret != ft.RET_OK or data is None or data.empty:

@@ -70,7 +70,18 @@ def test_candidate_only_caps_confidence_and_warns():
     assert result.decision_type == "buy"
     assert result.confidence_level == "Medium"
     assert "candidate" in result.risk_warning
-    assert result.dashboard["chan_gate"]["outcome"] == "candidate_only"
+    assert result.dashboard["chan_gate"]["outcome"] == "unconfirmed_support"
+
+
+def test_confirmation_level_point_alone_caps_confidence():
+    point = dict(_point(), level="60M", evidence_id="60M.3B.2026-11-12 15:30")
+    snapshot = _snapshot()
+    snapshot["levels"]["60M"] = {"status": "available", "buy_sell_points": [point]}
+    result = _result()
+    enforce_chan_buy_gate(result, snapshot)
+    assert result.decision_type == "buy"
+    assert result.confidence_level == "中"
+    assert result.dashboard["chan_gate"]["outcome"] == "unconfirmed_support"
 
 
 def test_gate_ignores_non_buy_calls_and_missing_snapshot():
