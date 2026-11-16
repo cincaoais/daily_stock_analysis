@@ -1048,6 +1048,9 @@ class Config:
     # LLM_JSON_MODE: send response_format={"type":"json_object"} on the stock analysis call
     # (retried once without it when a model rejects JSON mode). Off by default.
     llm_json_mode: bool = False
+    # LLM_ANALYSIS_MAX_OUTPUT_TOKENS: output cap of the stock analysis call. Reasoning models
+    # count hidden reasoning against it, which can truncate the dashboard JSON at 8192.
+    llm_analysis_max_output_tokens: int = 8192
 
     # Provider prompt-cache controls. These do not control provider implicit cache.
     llm_prompt_cache_telemetry_enabled: bool = True
@@ -1984,6 +1987,13 @@ class Config:
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),
             llm_json_mode=parse_env_bool(os.getenv("LLM_JSON_MODE"), default=False),
+            llm_analysis_max_output_tokens=parse_env_int(
+                os.getenv("LLM_ANALYSIS_MAX_OUTPUT_TOKENS"),
+                8192,
+                field_name="LLM_ANALYSIS_MAX_OUTPUT_TOKENS",
+                minimum=1024,
+                maximum=131072,
+            ),
             litellm_config_path=litellm_config_path,
             llm_models_source=llm_models_source,
             llm_channels=llm_channels,

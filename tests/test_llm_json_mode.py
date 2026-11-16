@@ -110,6 +110,26 @@ def test_analysis_call_drops_response_format_when_model_rejects_it():
     assert "response_format" not in calls[-1]
 
 
+@pytest.mark.parametrize("raw, expected", [("16384", 16384), ("", 8192), ("12", 1024)])
+def test_config_reads_analysis_max_output_tokens(monkeypatch, raw, expected):
+    from src.config import Config
+
+    monkeypatch.setenv("LLM_ANALYSIS_MAX_OUTPUT_TOKENS", raw)
+    Config.reset_instance()
+    try:
+        assert Config._load_from_env().llm_analysis_max_output_tokens == expected
+    finally:
+        Config.reset_instance()
+
+
+def test_analysis_max_output_tokens_ignores_non_int_config():
+    from src.analyzer import _analysis_max_output_tokens
+
+    assert _analysis_max_output_tokens(SimpleNamespace(llm_analysis_max_output_tokens=16384)) == 16384
+    assert _analysis_max_output_tokens(MagicMock()) == 8192
+    assert _analysis_max_output_tokens(SimpleNamespace()) == 8192
+
+
 @pytest.mark.parametrize("raw, expected", [("yes", True), ("false", False)])
 def test_config_reads_llm_json_mode(monkeypatch, raw, expected):
     from src.config import Config

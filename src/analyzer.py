@@ -1241,6 +1241,14 @@ def stabilize_decision_with_structure(
         logger.warning("[decision_stability] skipped: %s", exc)
 
 
+def _analysis_max_output_tokens(config: Any) -> int:
+    """LLM_ANALYSIS_MAX_OUTPUT_TOKENS when it is a real positive int, else the historical 8192."""
+    value = getattr(config, "llm_analysis_max_output_tokens", None)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return 8192
+
+
 _CHAN_ACTIONABLE_STATES = ("confirmed", "candidate")
 
 
@@ -4362,7 +4370,9 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
             # 设置生成配置
             generation_config = {
                 "temperature": config.llm_temperature,
-                "max_output_tokens": 8192,
+                # Reasoning models spend part of this budget on hidden reasoning, so the
+                # dashboard JSON can be cut off; LLM_ANALYSIS_MAX_OUTPUT_TOKENS raises it.
+                "max_output_tokens": _analysis_max_output_tokens(config),
             }
             if getattr(config, "llm_json_mode", False):
                 # Ask OpenAI-compatible providers for bare JSON; the dashboard

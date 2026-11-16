@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] 新增 `LLM_ANALYSIS_MAX_OUTPUT_TOKENS`（默认 `8192`，范围 1024-131072）：控制默认个股分析请求的输出 token 上限。推理模型的隐藏推理也计入上限，可能使决策仪表盘 JSON 中途截断并触发补全重试；使用推理模型时可调高（如 `16384`）。
 - [改进] 买入结论校准调整：主力资金流不可用时下调买入的规则仅作用于 A 股，美股/港股等本就没有该数据的市场不再因此把所有买入降为观察，改由缠论闸门判断；缠论闸门要求操作级别（日线）存在仍有效的 confirmed/candidate 买点才保留买入/加仓，只有确认级别（60/30 分钟）买点时降级为观望并保留报告中的入场计划（`dashboard.chan_gate.outcome=confirmation_level_only`），操作级别仅有 candidate 时置信度上限为中（`candidate_only`）；提示词同步说明确认级别买点只用于择时。
 - [新功能] 新增 `LLM_JSON_MODE`（默认 `false`）：开启后个股分析请求附带 `response_format={"type":"json_object"}`，减少模型在 JSON 外夹带说明文字导致的 `ambiguous_json` 解析失败与补全重试；模型明确拒绝 JSON 模式时同一模型去掉该参数重试一次，超时不重试；原有 JSON 与字段完整性校验保持不变。选股排序复用同一套 JSON 模式拒绝判断。
 - [新功能] 新增两个离线评估脚本：`evals/chan_event_study/run_study.py` 逐根 K 线时点回放缠论引擎，统计 candidate/confirmed 买卖点出现后 5/10/20 根 K 线的收益、失效价触发率及相对同期随机入场漂移的超额（Yahoo 数据，无需 LLM）；`evals/prompt_ab/run_ab.py` 用基于真实 AAPL 快照的 7 个冻结场景驱动真实分析器，多次重复并自动评分（动作是否合规、是否引用快照 evidence_id、是否编造概率/证据、止损是否锚定失效价），支持 `rescore` 与两版提示词 `compare`。
