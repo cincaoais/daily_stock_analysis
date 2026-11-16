@@ -70,18 +70,38 @@ def test_candidate_only_caps_confidence_and_warns():
     assert result.decision_type == "buy"
     assert result.confidence_level == "Medium"
     assert "candidate" in result.risk_warning
-    assert result.dashboard["chan_gate"]["outcome"] == "unconfirmed_support"
+    assert result.dashboard["chan_gate"]["outcome"] == "candidate_only"
 
 
-def test_confirmation_level_point_alone_caps_confidence():
+def test_confirmation_level_point_alone_becomes_watch_and_keeps_entry_plan():
     point = dict(_point(), level="60M", evidence_id="60M.3B.2026-11-12 15:30")
     snapshot = _snapshot()
     snapshot["levels"]["60M"] = {"status": "available", "buy_sell_points": [point]}
     result = _result()
+    plan = {"sniper_points": {"ideal_buy": "354.41", "stop_loss": "347.59"}}
+    result.dashboard["battle_plan"] = plan
     enforce_chan_buy_gate(result, snapshot)
-    assert result.decision_type == "buy"
-    assert result.confidence_level == "中"
-    assert result.dashboard["chan_gate"]["outcome"] == "unconfirmed_support"
+    assert result.decision_type == "hold"
+    assert result.operation_advice == "观望"
+    assert result.dashboard["chan_gate"] == {
+        "applied": True, "outcome": "confirmation_level_only", "supporting_points": ["60M.3B.2026-11-12 15:30"]}
+    assert "60M.3B.2026-11-12 15:30" in result.risk_warning
+    assert result.dashboard["battle_plan"] == plan
+
+
+def test_capital_flow_downgrade_applies_to_a_shares_only():
+    from src.analyzer import stabilize_decision_with_structure
+
+    unsupported = {"capital_flow": {"status": "not_supported", "data": {}}}
+    us = _result(language="en", advice="Buy", confidence="Medium")
+    stabilize_decision_with_structure(us, None, unsupported)
+    assert us.decision_type == "buy" and us.operation_advice == "Buy"
+    assert us.dashboard["decision_stability"]["applied"] is False
+
+    cn = _result()
+    cn.code = "600519"
+    stabilize_decision_with_structure(cn, None, unsupported)
+    assert cn.decision_type == "hold"
 
 
 def test_gate_ignores_non_buy_calls_and_missing_snapshot():

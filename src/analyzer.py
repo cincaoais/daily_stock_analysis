@@ -1112,7 +1112,11 @@ def stabilize_decision_with_structure(
         flow_bias, flow_reason = _capital_flow_bias_with_status(fundamental_context)
         if flow_bias == "unavailable":
             if isinstance(fundamental_context, dict) and "capital_flow" in fundamental_context:
-                if decision_type == "buy" or advice_decision_type == "buy":
+                # Main-force capital flow only exists for A-shares. For other markets its
+                # absence is structural, not a warning sign, so it must not veto a buy;
+                # the Chan buy gate decides there instead.
+                market_has_flow_data = detect_market(str(getattr(result, "code", "") or "")) == "cn"
+                if market_has_flow_data and (decision_type == "buy" or advice_decision_type == "buy"):
                     _downgrade_buy_without_capital_flow(
                         result,
                         language,
@@ -1272,11 +1276,12 @@ def enforce_chan_buy_gate(
     """Downgrade buy/add calls the Chan snapshot does not support.
 
     A buy needs a still-valid buy point in state confirmed or candidate on the operating
-    or confirmation level, with price above its invalidation price (skipped when the
-    current price is unknown). Unless a confirmed point on the operating level supports
-    it, confidence is capped at medium. Does nothing without a snapshot (Chan analysis
-    disabled) or when no level is usable; if daily is unusable the engine promotes the
-    next usable level to operating.
+    level, with price above its invalidation price (skipped when the current price is
+    unknown). A point only on the confirmation level is not enough: the call becomes
+    watch and the report's entry plan stays. A candidate-only operating point caps
+    confidence at medium. Does nothing without a snapshot (Chan analysis disabled) or
+    when no level is usable; if daily is unusable the engine promotes the next usable
+    level to operating.
     """
     if not result or not isinstance(chan_snapshot, dict) or not chan_snapshot.get("levels"):
         return
@@ -1295,23 +1300,40 @@ def enforce_chan_buy_gate(
         language = normalize_report_language(getattr(result, "report_language", "zh"))
         current_price = _first_numeric_value(getattr(result, "current_price", None))
         points = _chan_supporting_buy_points(chan_snapshot, current_price)
+        operating = roles.get("operating") or "D"
+        operating_points = [p for p in points if p.get("level", operating) == operating]
+        lower_ids = [str(p.get("evidence_id")) for p in points if p not in operating_points]
         dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
         result.dashboard = dashboard
-        point_ids = [str(p.get("evidence_id")) for p in points]
+        point_ids = [str(p.get("evidence_id")) for p in operating_points]
 
-        if not points:
-            reason = _localized_text(
-                language,
-                zh="缠论快照中操作级别和确认级别都没有已确认/候选且仍有效的买点，买入结论缺少结构依据，按观察处理。",
-                en="The Chan snapshot has no still-valid confirmed or candidate buy point on the operating or "
-                   "confirmation level, so the buy call lacks structural support and is treated as watch-only.",
-                ko="찬 구조 스냅샷의 운용·확인 레벨에 유효한 확정/후보 매수 포인트가 없어 매수 결론을 관찰로 처리합니다.",
-            )
+        if not operating_points:
+            if lower_ids:
+                ids = ", ".join(lower_ids)
+                reason = _localized_text(
+                    language,
+                    zh=f"操作级别没有仍有效的买点，只有确认级别的买点（{ids}），按观察处理；可按报告中的入场计划等待操作级别出现买点。",
+                    en=f"The operating level has no still-valid buy point; only confirmation-level points ({ids}) "
+                       "support it, so it is treated as watch-only. Keep the entry plan and wait for an "
+                       "operating-level buy point.",
+                    ko=f"운용 레벨에 유효한 매수 포인트가 없고 확인 레벨 포인트({ids})만 있어 관찰로 처리합니다. "
+                       "진입 계획은 유지하고 운용 레벨 매수 포인트를 기다리세요.",
+                )
+                outcome = "confirmation_level_only"
+            else:
+                reason = _localized_text(
+                    language,
+                    zh="缠论快照中操作级别和确认级别都没有已确认/候选且仍有效的买点，买入结论缺少结构依据，按观察处理。",
+                    en="The Chan snapshot has no still-valid confirmed or candidate buy point on the operating or "
+                       "confirmation level, so the buy call lacks structural support and is treated as watch-only.",
+                    ko="찬 구조 스냅샷의 운용·확인 레벨에 유효한 확정/후보 매수 포인트가 없어 매수 결론을 관찰로 처리합니다.",
+                )
+                outcome = "downgraded_to_watch"
             no_position = _localized_text(
                 language,
-                zh="空仓先不买入，等待操作级别出现二买/三买并确认后再行动。",
-                en="Do not buy yet; wait for a 2B/3B on the operating level to appear and confirm.",
-                ko="아직 매수하지 말고 운용 레벨의 2B/3B 출현과 확인을 기다리세요.",
+                zh="空仓先不买入，等待操作级别出现二买/三买后再行动。",
+                en="Do not buy yet; wait for a 2B/3B on the operating level.",
+                ko="아직 매수하지 말고 운용 레벨의 2B/3B를 기다리세요.",
             )
             has_position = _localized_text(
                 language,
@@ -1333,28 +1355,25 @@ def enforce_chan_buy_gate(
                 no_position=no_position,
                 has_position=has_position,
             )
-            dashboard["chan_gate"] = {"applied": True, "outcome": "downgraded_to_watch", "supporting_points": []}
+            dashboard["chan_gate"] = {"applied": True, "outcome": outcome, "supporting_points": lower_ids}
             _sync_stability_dashboard_fields(result)
-            logger.info("[chan_gate] Downgraded buy without a supporting Chan buy point")
+            logger.info("[chan_gate] Downgraded buy without an operating-level Chan buy point (%s)", outcome)
             return
 
-        operating = roles.get("operating") or "D"
-        strong = [p for p in points if p.get("state") == "confirmed" and p.get("level", operating) == operating]
-        if not strong:
+        if not any(p.get("state") == "confirmed" for p in operating_points):
             if localize_confidence_level(getattr(result, "confidence_level", ""), "en") == "High":
                 result.confidence_level = localize_confidence_level("medium", language)
             note = _localized_text(
                 language,
-                zh="依据的买点尚未在操作级别确认（仍是候选，或只来自确认级别），待确认前只宜小仓试探。",
-                en="The supporting buy point is not confirmed on the operating level (it is still a candidate "
-                   "or comes only from the confirmation level); only a small trial position fits until it is confirmed.",
-                ko="근거 매수 포인트가 운용 레벨에서 아직 확정되지 않았으므로(후보 상태이거나 확인 레벨에서만 나옴) "
-                   "확인 전에는 소량 시험 매수만 적합합니다.",
+                zh="操作级别的买点仍是候选状态（最新一笔可能被重画），待确认前只宜小仓试探。",
+                en="The operating-level buy point is still a candidate (the newest stroke can be redrawn); "
+                   "only a small trial position fits until it is confirmed.",
+                ko="운용 레벨 매수 포인트가 아직 후보 상태(최신 획이 다시 그려질 수 있음)이므로 확인 전에는 소량 시험 매수만 적합합니다.",
             )
             if note not in str(result.risk_warning or ""):
                 sep = "；" if language == "zh" else "; "
                 result.risk_warning = f"{result.risk_warning}{sep}{note}" if result.risk_warning else note
-            dashboard["chan_gate"] = {"applied": True, "outcome": "unconfirmed_support", "supporting_points": point_ids}
+            dashboard["chan_gate"] = {"applied": True, "outcome": "candidate_only", "supporting_points": point_ids}
             return
         dashboard["chan_gate"] = {"applied": False, "outcome": "supported", "supporting_points": point_ids}
     except Exception as exc:  # noqa: BLE001 - a guard failure must not drop the report
@@ -2270,7 +2289,7 @@ class GeminiAnalyzer:
 - 不得仅因为单日涨跌或评分跨线就在“买入/卖出”之间剧烈切换。
 - 操作建议由缠论结构决定：买卖点的 `state`/`still_valid`、级别分工和失效价决定动作；价格位置（支撑/压力位）、量能/筹码、资金流向和风险事件只作背景，可否决或降级，不能单独产生买卖。
 - 操作级别没有 confirmed/candidate 且仍有效的买卖点，或价格在中枢内部、方向不明时，优先输出“持有/震荡/观望/洗盘观察”等可执行的中性建议；`decision_type` 仍保持 `hold`。
-- 只有方向级别不相反、存在 confirmed/candidate 且仍有效的买点、现价在其失效价之上、且无重大利空时，才能给出买入/加仓；单独的背驰或 forming 状态不得给出买入，接近压力且资金流出时不得追买。
+- 只有方向级别不相反、操作级别存在 confirmed/candidate 且仍有效的买点（确认级别的买点只用于择时）、现价在其失效价之上、且无重大利空时，才能给出买入/加仓；单独的背驰或 forming 状态不得给出买入，接近压力且资金流出时不得追买。
 - 只有出现仍有效的卖点、持仓依赖的买点已被击穿失效价（invalidated）或风险显著放大时，才能给出卖出/减仓。
 - 必须输出 `dashboard.phase_decision` 七字段；盘中/午休/临近收盘要给出当前动作、观察条件和下一次检查点。
 - 建议输出可选展示字段 `dashboard.signal_attribution` 六字段；解释推荐理由的构成，包括技术指标、新闻舆情、基本面、市场环境的贡献度，以及最强看多/看空信号。
@@ -2456,7 +2475,7 @@ class GeminiAnalyzer:
 - 不得仅因为单日涨跌或评分跨线就在“买入/卖出”之间剧烈切换。
 - 操作建议由缠论结构决定：买卖点的 `state`/`still_valid`、级别分工和失效价决定动作；价格位置（支撑/压力位）、量能/筹码、资金流向和风险事件只作背景，可否决或降级，不能单独产生买卖。
 - 操作级别没有 confirmed/candidate 且仍有效的买卖点，或价格在中枢内部、方向不明时，优先输出“持有/震荡/观望/洗盘观察”等可执行的中性建议；`decision_type` 仍保持 `hold`。
-- 只有方向级别不相反、存在 confirmed/candidate 且仍有效的买点、现价在其失效价之上、且无重大利空时，才能给出买入/加仓；单独的背驰或 forming 状态不得给出买入，接近压力且资金流出时不得追买。
+- 只有方向级别不相反、操作级别存在 confirmed/candidate 且仍有效的买点（确认级别的买点只用于择时）、现价在其失效价之上、且无重大利空时，才能给出买入/加仓；单独的背驰或 forming 状态不得给出买入，接近压力且资金流出时不得追买。
 - 只有出现仍有效的卖点、持仓依赖的买点已被击穿失效价（invalidated）或风险显著放大时，才能给出卖出/减仓。
 - 必须输出 `dashboard.phase_decision` 七字段；盘中/午休/临近收盘要给出当前动作、观察条件和下一次检查点。
 - 建议输出可选展示字段 `dashboard.signal_attribution` 六字段；解释推荐理由的构成，包括技术指标、新闻舆情、基本面、市场环境的贡献度，以及最强看多/看空信号。
@@ -2592,7 +2611,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 - Do not flip between "Buy" and "Sell" just because of a single day's move or because the score crossed a threshold.
 - Chan structure decides the action: the points' `state`/`still_valid`, the level roles and the invalidation price. Price position (support/resistance), volume/chips, capital flow and risk events are context: they may veto or downgrade, never create a buy or sell on their own.
 - When the operating level has no confirmed/candidate point that is still valid, or price sits inside the pivot with no clear direction, prefer actionable neutral advice such as "Hold/Sideways/Watch/Shakeout watch"; `decision_type` stays `hold`.
-- Only give Buy/Add when the direction level does not oppose it, a confirmed/candidate buy point is still valid, price is above its invalidation price, and no material negative overrides it; divergence alone or a `forming` state never justifies Buy, and never chase near resistance while capital flows out.
+- Only give Buy/Add when the direction level does not oppose it, a confirmed/candidate buy point on the operating level is still valid (confirmation-level points only time the entry), price is above its invalidation price, and no material negative overrides it; divergence alone or a `forming` state never justifies Buy, and never chase near resistance while capital flows out.
 - Only give Sell/Reduce on a still-valid sell point, when the buy point a holder relies on has been invalidated, or when risk clearly increases.
 - `dashboard.phase_decision` must contain all seven fields; intraday, lunch break and near the close must give the current action, watch conditions and the next checkpoint.
 - The optional display field `dashboard.signal_attribution` (six fields) is recommended; explain what drives the recommendation, including the contribution of technical indicators, news sentiment, fundamentals and market conditions, and the strongest bullish/bearish signals.

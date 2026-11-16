@@ -52,7 +52,7 @@ CORE_TRADING_SKILL_POLICY_ZH = """## 默认技能基线：缠论（必须严格�
 ### 5. 决策闸门（任一不通过 → 观望/持有观察）
 1. 操作级别数据可用？
 2. 方向级别不与交易相反（若相反，必须减仓并写明）？
-3. 操作级别或确认级别存在 `state` 为 confirmed 或 candidate、且 `still_valid=true` 的买点？
+3. 操作级别存在 `state` 为 confirmed 或 candidate、且 `still_valid=true` 的买点？（确认级别的买点只用于择时，单独不构成买入理由）
 4. 现价仍在该买点 `invalidation_price` 之上，且到失效价的距离与仓位相称？
 5. 没有足以压倒结构的重大利空或事件？
 全部通过才可给出买入/加仓。卖出同理使用卖点；持仓所依赖的买点变为 invalidated 时，持仓者应减仓/卖出。
@@ -94,7 +94,7 @@ Activated skills may refine the view; these rules decide the final action.
 ### 5. Decision gates (any failure -> watch / hold and observe)
 1. Is the operating level's data usable?
 2. Does the direction level not oppose the trade (if it does, reduce size and say so)?
-3. Is there a buy point on the operating or confirmation level with `state` confirmed or candidate and `still_valid=true`?
+3. Is there a buy point on the operating level with `state` confirmed or candidate and `still_valid=true`? (A confirmation-level point only times the entry; on its own it is not a reason to buy.)
 4. Is the current price still above that point's `invalidation_price`, with a distance that fits the position size?
 5. Is there no material negative news or event that overrides the structure?
 Only when all pass may the action be buy/add. Sells mirror this with sell points; holders reduce or sell when the buy point they rely on becomes invalidated.
@@ -120,7 +120,8 @@ following Chan theory controls as the shared baseline:
 - `state`: forming = watch only; candidate = can still be redrawn, small trial at most;
   confirmed = fixed; invalidated = history only. Never upgrade a state in prose
 - Divergence is a warning, not a signal; range_divergence gives no direction
-- Act only on a confirmed/candidate point with `still_valid=true`; no such point -> hold off
+- Buy only on an operating-level confirmed/candidate point with `still_valid=true`;
+  confirmation-level points time the entry but never justify a buy alone; no such point -> hold off
 - Anchor the stop-loss to the point's `invalidation_price`; no invented probabilities or
   fixed-percent stops; partial or missing levels lower confidence
 """
