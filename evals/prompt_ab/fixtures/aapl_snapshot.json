@@ -1,0 +1,447 @@
+{
+ "schema_version": "chan_snapshot/1.1",
+ "symbol": "AAPL",
+ "name": "AAPL",
+ "market": "us",
+ "as_of": "2026-11-13 15:30",
+ "level_roles": {
+  "direction": "W",
+  "operating": "D",
+  "confirmation": "60M"
+ },
+ "data_quality": {
+  "status": "available",
+  "engine": "czsc",
+  "engine_version": "1.0.2",
+  "unusable_levels": [],
+  "warnings": []
+ },
+ "levels": {
+  "W": {
+   "status": "available",
+   "timeframe": "1w",
+   "engine_version": "1.0.2",
+   "bar_count": 261,
+   "first_bar": "2021-11-15",
+   "last_bar": "2026-11-09",
+   "last_close": 356.27,
+   "trend_type": "up",
+   "position_vs_last_zhongshu": "above",
+   "current_bi": {
+    "id": "W.bi.2026-11-09",
+    "direction": "up",
+    "start_dt": "2026-01-19",
+    "end_dt": "2026-11-09",
+    "start_price": 243.42,
+    "end_price": 360.83,
+    "amplitude_pct": 48.23,
+    "macd_area": 96.5188,
+    "state": "forming"
+   },
+   "segment": {
+    "status": "not_supported"
+   },
+   "zhongshu": [
+    {
+     "zg": 176.15,
+     "zd": 129.04,
+     "gg": 237.49,
+     "dd": 124.17,
+     "start_dt": "2022-01-03",
+     "end_dt": "2024-10-14",
+     "stroke_count": 8
+    },
+    {
+     "zg": 237.49,
+     "zd": 219.71,
+     "gg": 288.62,
+     "dd": 169.21,
+     "start_dt": "2024-10-14",
+     "end_dt": "2025-12-01",
+     "stroke_count": 4
+    }
+   ],
+   "divergence": {
+    "present": true,
+    "type": "top",
+    "method": "macd_area",
+    "strength_ratio": 0.625,
+    "stroke_id": "W.bi.2026-11-09",
+    "compared_stroke_id": "W.bi.2025-12-01",
+    "state": "forming"
+   },
+   "buy_sell_points": [
+    {
+     "evidence_id": "W.3B.2024-11-04",
+     "type": "3B",
+     "side": "buy",
+     "level": "W",
+     "dt": "2024-11-04",
+     "price": 219.71,
+     "invalidation_price": 176.15,
+     "basis": "pivot_exit",
+     "state": "invalidated",
+     "still_valid": false,
+     "bars_since": 105
+    },
+    {
+     "evidence_id": "W.1S.2024-12-23",
+     "type": "1S",
+     "side": "sell",
+     "level": "W",
+     "dt": "2024-12-23",
+     "price": 260.1,
+     "invalidation_price": 260.1,
+     "basis": "range_divergence",
+     "state": "invalidated",
+     "still_valid": false,
+     "bars_since": 98
+    },
+    {
+     "evidence_id": "W.3B.2026-01-19",
+     "type": "3B",
+     "side": "buy",
+     "level": "W",
+     "dt": "2026-01-19",
+     "price": 243.42,
+     "invalidation_price": 237.49,
+     "basis": "pivot_exit",
+     "state": "candidate",
+     "still_valid": true,
+     "bars_since": 42
+    },
+    {
+     "evidence_id": "W.1S.2026-11-09",
+     "type": "1S",
+     "side": "sell",
+     "level": "W",
+     "dt": "2026-11-09",
+     "price": 360.83,
+     "invalidation_price": 360.83,
+     "basis": "trend_divergence",
+     "state": "forming",
+     "still_valid": true,
+     "bars_since": 0
+    }
+   ],
+   "key_levels": {
+    "support": [
+     288.62,
+     243.42,
+     237.49
+    ],
+    "resistance": [
+     360.83
+    ]
+   },
+   "warnings": [],
+   "source": "yfinance"
+  },
+  "D": {
+   "status": "available",
+   "timeframe": "1d",
+   "engine_version": "1.0.2",
+   "bar_count": 501,
+   "first_bar": "2024-11-14",
+   "last_bar": "2026-11-13",
+   "last_close": 356.27,
+   "trend_type": "up",
+   "position_vs_last_zhongshu": "above",
+   "current_bi": {
+    "id": "D.bi.2026-11-13",
+    "direction": "up",
+    "start_dt": "2026-11-03",
+    "end_dt": "2026-11-13",
+    "start_price": 325.33,
+    "end_price": 360.83,
+    "amplitude_pct": 10.91,
+    "macd_area": 4.1776,
+    "state": "forming"
+   },
+   "segment": {
+    "status": "not_supported"
+   },
+   "zhongshu": [
+    {
+     "zg": 302.42,
+     "zd": 287.38,
+     "gg": 334.99,
+     "dd": 273.75,
+     "start_dt": "2026-06-03",
+     "end_dt": "2026-07-17",
+     "stroke_count": 4
+    },
+    {
+     "zg": 334.99,
+     "zd": 325.81,
+     "gg": 348.15,
+     "dd": 319.35,
+     "start_dt": "2026-07-17",
+     "end_dt": "2026-10-13",
+     "stroke_count": 4
+    },
+    {
+     "zg": 348.15,
+     "zd": 338.7,
+     "gg": 351.73,
+     "dd": 325.33,
+     "start_dt": "2026-10-13",
+     "end_dt": "2026-11-03",
+     "stroke_count": 3
+    }
+   ],
+   "divergence": {
+    "present": false,
+    "method": "macd_area"
+   },
+   "buy_sell_points": [
+    {
+     "evidence_id": "D.3B.2026-07-23",
+     "type": "3B",
+     "side": "buy",
+     "level": "D",
+     "dt": "2026-07-23",
+     "price": 319.35,
+     "invalidation_price": 302.42,
+     "basis": "pivot_exit",
+     "state": "invalidated",
+     "still_valid": false,
+     "bars_since": 80
+    },
+    {
+     "evidence_id": "D.3B.2026-10-20",
+     "type": "3B",
+     "side": "buy",
+     "level": "D",
+     "dt": "2026-10-20",
+     "price": 338.7,
+     "invalidation_price": 334.99,
+     "basis": "pivot_exit",
+     "state": "invalidated",
+     "still_valid": false,
+     "bars_since": 18
+    }
+   ],
+   "key_levels": {
+    "support": [
+     351.73,
+     348.15,
+     338.7
+    ],
+    "resistance": [
+     360.83
+    ]
+   },
+   "warnings": [],
+   "source": "yfinance"
+  },
+  "60M": {
+   "status": "available",
+   "timeframe": "60m",
+   "engine_version": "1.0.2",
+   "bar_count": 840,
+   "first_bar": "2026-05-27 09:30",
+   "last_bar": "2026-11-13 15:30",
+   "last_close": 356.4,
+   "trend_type": "up",
+   "position_vs_last_zhongshu": "above",
+   "current_bi": {
+    "id": "60M.bi.2026-11-13 09:30",
+    "direction": "up",
+    "start_dt": "2026-11-12 15:30",
+    "end_dt": "2026-11-13 09:30",
+    "start_price": 354.41,
+    "end_price": 360.83,
+    "amplitude_pct": 1.81,
+    "macd_area": 0.0,
+    "state": "forming"
+   },
+   "segment": {
+    "status": "not_supported"
+   },
+   "zhongshu": [
+    {
+     "zg": 339.57,
+     "zd": 334.7,
+     "gg": 345.34,
+     "dd": 325.81,
+     "start_dt": "2026-07-27 11:30",
+     "end_dt": "2026-10-01 11:30",
+     "stroke_count": 11
+    },
+    {
+     "zg": 334.54,
+     "zd": 331.65,
+     "gg": 348.1499,
+     "dd": 325.81,
+     "start_dt": "2026-10-01 11:30",
+     "end_dt": "2026-10-13 09:30",
+     "stroke_count": 5
+    },
+    {
+     "zg": 347.85,
+     "zd": 340.74,
+     "gg": 359.3684,
+     "dd": 326.0,
+     "start_dt": "2026-10-13 09:30",
+     "end_dt": "2026-11-12 09:30",
+     "stroke_count": 10
+    }
+   ],
+   "divergence": {
+    "present": false,
+    "method": "macd_area"
+   },
+   "buy_sell_points": [
+    {
+     "evidence_id": "60M.1S.2026-11-12 09:30",
+     "type": "1S",
+     "side": "sell",
+     "level": "60M",
+     "dt": "2026-11-12 09:30",
+     "price": 359.3684,
+     "invalidation_price": 359.3684,
+     "basis": "trend_divergence",
+     "state": "invalidated",
+     "still_valid": false,
+     "bars_since": 13
+    },
+    {
+     "evidence_id": "60M.3B.2026-11-12 15:30",
+     "type": "3B",
+     "side": "buy",
+     "level": "60M",
+     "dt": "2026-11-12 15:30",
+     "price": 354.41,
+     "invalidation_price": 347.85,
+     "basis": "pivot_exit",
+     "state": "candidate",
+     "still_valid": true,
+     "bars_since": 7
+    }
+   ],
+   "key_levels": {
+    "support": [
+     354.41,
+     348.1499,
+     347.85
+    ],
+    "resistance": [
+     359.3684,
+     360.83
+    ]
+   },
+   "warnings": [],
+   "source": "yfinance"
+  },
+  "30M": {
+   "status": "available",
+   "timeframe": "30m",
+   "engine_version": "1.0.2",
+   "bar_count": 585,
+   "first_bar": "2026-09-14 09:30",
+   "last_bar": "2026-11-13 15:30",
+   "last_close": 356.4,
+   "trend_type": "up",
+   "position_vs_last_zhongshu": "above",
+   "current_bi": {
+    "id": "30M.bi.2026-11-13 09:30",
+    "direction": "up",
+    "start_dt": "2026-11-12 15:30",
+    "end_dt": "2026-11-13 09:30",
+    "start_price": 354.41,
+    "end_price": 360.83,
+    "amplitude_pct": 1.81,
+    "macd_area": 0.0,
+    "state": "forming"
+   },
+   "segment": {
+    "status": "not_supported"
+   },
+   "zhongshu": [
+    {
+     "zg": 332.88,
+     "zd": 329.2101,
+     "gg": 354.47,
+     "dd": 326.0,
+     "start_dt": "2026-11-03 09:30",
+     "end_dt": "2026-11-04 12:00",
+     "stroke_count": 3
+    },
+    {
+     "zg": 345.79,
+     "zd": 343.18,
+     "gg": 354.47,
+     "dd": 338.3,
+     "start_dt": "2026-11-04 12:00",
+     "end_dt": "2026-11-09 10:30",
+     "stroke_count": 4
+    },
+    {
+     "zg": 351.42,
+     "zd": 348.8192,
+     "gg": 359.3684,
+     "dd": 346.4605,
+     "start_dt": "2026-11-09 10:30",
+     "end_dt": "2026-11-12 09:30",
+     "stroke_count": 4
+    }
+   ],
+   "divergence": {
+    "present": false,
+    "method": "macd_area"
+   },
+   "buy_sell_points": [
+    {
+     "evidence_id": "30M.3B.2026-11-09 12:30",
+     "type": "3B",
+     "side": "buy",
+     "level": "30M",
+     "dt": "2026-11-09 12:30",
+     "price": 348.8192,
+     "invalidation_price": 345.79,
+     "basis": "pivot_exit",
+     "state": "confirmed",
+     "still_valid": true,
+     "bars_since": 58
+    },
+    {
+     "evidence_id": "30M.3B.2026-11-12 15:30",
+     "type": "3B",
+     "side": "buy",
+     "level": "30M",
+     "dt": "2026-11-12 15:30",
+     "price": 354.41,
+     "invalidation_price": 351.42,
+     "basis": "pivot_exit",
+     "state": "candidate",
+     "still_valid": true,
+     "bars_since": 13
+    }
+   ],
+   "key_levels": {
+    "support": [
+     354.47,
+     354.41,
+     351.42
+    ],
+    "resistance": [
+     359.3684,
+     360.83
+    ]
+   },
+   "warnings": [],
+   "source": "yfinance"
+  }
+ },
+ "cross_level": {
+  "resonance": "full",
+  "aligned_direction": "up",
+  "bi_directions": {
+   "W": "up",
+   "D": "up",
+   "60M": "up",
+   "30M": "up"
+  }
+ }
+}
