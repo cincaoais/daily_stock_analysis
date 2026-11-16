@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-- [改进] 移除仅支持中国大陆手机号注册的搜索服务：删除 Bocha（`BOCHA_API_KEYS`）与 Anspire 搜索 provider；`ANSPIRE_API_KEYS` 保留并继续用于 Anspire 模型网关。保留可全球使用的 Tavily、Brave、SerpAPI、MiniMax、SearXNG，关键词搜索顺序为 Tavily → Brave → SerpAPI → MiniMax → SearXNG。**兼容性**：已配置 `BOCHA_API_KEYS` 的部署将不再使用该 Key。
+- [改进] 移除 MiniMax 搜索 provider（`MINIMAX_API_KEYS`，需 MiniMax Coding Plan 订阅）；MiniMax 大模型渠道（`LLM_MINIMAX_*`）不受影响。**兼容性**：已配置 `MINIMAX_API_KEYS` 的部署将不再使用该 Key。
+- [改进] 移除仅支持中国大陆手机号注册的搜索服务：删除 Bocha（`BOCHA_API_KEYS`）与 Anspire 搜索 provider；`ANSPIRE_API_KEYS` 保留并继续用于 Anspire 模型网关。保留可全球使用的 Tavily、Brave、SerpAPI、SearXNG，关键词搜索顺序为 Tavily → Brave → SerpAPI → SearXNG。**兼容性**：已配置 `BOCHA_API_KEYS` 的部署将不再使用该 Key。
 - [新功能] 新增按股票代码查询的新闻源 `NEWS_TICKER_PROVIDERS`（默认 `yahoo,finnhub`）：Yahoo Finance 免 Key，Finnhub 复用 `FINNHUB_API_KEY`（免费版仅北美公司）；个股新闻与多维情报的“最新消息”优先走这些源，结果仍经过原有的时效过滤、相关度排序与准入规则，无结果时回退到已配置的关键词搜索引擎。未配置任何搜索 Key 时也能获得美股/港股新闻。FMP 新闻接口需付费套餐，暂未接入。
 - [改进] 内置策略全部替换为缠论体系：移除原 14 个均线/趋势/题材类策略 YAML，保留并重写 `chan_theory`（默认策略），新增 `chan_divergence_reversal`、`chan_second_buy`、`chan_third_buy`、`chan_zhongshu_oscillation`、`chan_multi_level`；默认技能基线、默认分析提示词的评分标准/检查清单/重点关注、Agent 工作流与多 Agent 路由改为依据缠论结构快照（买卖点、背驰、失效价、多级别共振），不再使用 MA 多头排列与乖离率规则。**兼容性**：`AGENT_SKILLS` 或 API `skills` 中的旧策略名（如 `bull_trend`、`wave_theory`）不再存在，需改用新的缠论策略 id；选股策略的 `analysis_skills` 已同步指向缠论策略。
 - [新功能] 个股分析接入缠论结构快照：分析流程通过 `get_kline_data` 拉取周线/日线/60 分钟/30 分钟 K 线，由 `src/chan` 计算笔、中枢、背驰与一二三类买卖点后注入默认分析提示词、单 Agent 与多 Agent 上下文，并新增 Agent 工具 `get_chan_structure`；可用 `CHAN_ANALYSIS_ENABLED=false` 关闭，`CHAN_TIMEFRAMES` 选择级别（默认 `1w,1d,60m,30m`）。港股/美股在配置 OpenD 时 K 线优先走 Futu / moomoo。

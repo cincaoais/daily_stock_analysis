@@ -1109,7 +1109,6 @@ class Config:
 
     # === 搜索引擎配置（支持多 Key 负载均衡）===
     anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Open keys (legacy Anspire LLM gateway)
-    minimax_api_keys: List[str] = field(default_factory=list)  # MiniMax API Keys
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
     brave_api_keys: List[str] = field(default_factory=list)  # Brave Search API Keys
     serpapi_keys: List[str] = field(default_factory=list)  # SerpAPI Keys
@@ -1830,8 +1829,6 @@ class Config:
 
         # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
 
-        minimax_keys_str = os.getenv('MINIMAX_API_KEYS', '')
-        minimax_api_keys = [k.strip() for k in minimax_keys_str.split(',') if k.strip()]
         
         tavily_keys_str = os.getenv('TAVILY_API_KEYS', '')
         tavily_api_keys = [k.strip() for k in tavily_keys_str.split(',') if k.strip()]
@@ -2036,7 +2033,6 @@ class Config:
             ),
             vision_provider_priority=os.getenv('VISION_PROVIDER_PRIORITY', 'gemini,anthropic,openai'),
             anspire_api_keys=anspire_api_keys,
-            minimax_api_keys=minimax_api_keys,
             tavily_api_keys=tavily_api_keys,
             brave_api_keys=brave_api_keys,
             serpapi_keys=serpapi_keys,
@@ -3212,8 +3208,7 @@ class Config:
     def has_search_capability_enabled(self) -> bool:
         """Whether any search provider is configured or SearXNG fallback is enabled."""
         return bool(
-            self.minimax_api_keys
-            or self.tavily_api_keys
+            self.tavily_api_keys
             or self.brave_api_keys
             or self.serpapi_keys
             or self.has_searxng_enabled()
@@ -3642,7 +3637,7 @@ class Config:
         if not self.has_search_capability_enabled():
             issues.append(ConfigIssue(
                 severity="info",
-                message="未配置关键词搜索引擎 (Tavily/Brave/SerpAPI/MiniMax/SearXNG)，风险、业绩、行业等情报维度将不可用；个股最新新闻仍可由 NEWS_TICKER_PROVIDERS 提供",
+                message="未配置关键词搜索引擎 (Tavily/Brave/SerpAPI/SearXNG)，风险、业绩、行业等情报维度将不可用；个股最新新闻仍可由 NEWS_TICKER_PROVIDERS 提供",
                 field="TAVILY_API_KEYS",
             ))
 

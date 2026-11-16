@@ -225,7 +225,6 @@ journalctl -u stock-analyzer -f
 | `SERPAPI_API_KEYS` | - | SerpAPI realtime financial news search (recommended) |
 | `ANSPIRE_API_KEYS` | - | [Anspire](https://open.anspire.cn/dsa?share_code=QFBC0FYC) API key (optional; shared by LLM and search; availability depends on account permissions) |
 | `TAVILY_API_KEYS` | - | Tavily news search (optional) |
-| `MINIMAX_API_KEYS` | - | MiniMax search (optional) |
 
 ---
 
@@ -400,7 +399,6 @@ Add these Secrets:
 | `ANSPIRE_API_KEYS` | [Anspire](https://open.anspire.cn/dsa?share_code=QFBC0FYC) API key (optional; shared by LLM and search; availability depends on account permissions) | Optional |
 | `TAVILY_API_KEYS` | Tavily Search API Key | Optional |
 | `BRAVE_API_KEYS` | Brave Search API Key | Optional |
-| `MINIMAX_API_KEYS` | MiniMax Coding Plan Web Search | Optional |
 | `TUSHARE_TOKEN` | Tushare Token | Optional |
 | `GEMINI_MODEL` | Model name (default gemini-3.6-flash) | Optional |
 
