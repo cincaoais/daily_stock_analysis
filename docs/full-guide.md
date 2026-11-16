@@ -742,6 +742,7 @@ python main.py --no-market-review     # 仅个股分析
 python main.py --etf-rotation         # ETF 轮动信号 + 规则回测（不调用 LLM，见 docs/etf-rotation.md）
 python main.py --stocks 600519,300750 # 指定股票
 python main.py --portfolio futu       # 使用 Futu 真实 LONG 正股持仓（覆盖 --stocks/STOCK_LIST）
+python main.py --scan sp500,nasdaq100 # 缠论日线预筛美股指数成分股，只分析入选股票（见下文）
 python main.py --dry-run              # 仅获取数据，不 AI 分析
 python main.py --no-notify            # 不发送推送
 python main.py --schedule             # 定时任务模式
@@ -749,6 +750,23 @@ python main.py --force-run            # 非交易日也强制执行（Issue #373
 python main.py --debug                # 调试模式（详细日志）
 python main.py --workers 5            # 指定并发数
 ```
+
+### 缠论指数成分扫描（`--scan`）
+
+`--scan sp500,nasdaq100` 先不调用 LLM 扫描标普 500 和纳斯达克 100 成分股（约 520 只，去重后），再只把入选股票送入正常的个股分析：
+
+1. 成分股名单来自 Wikipedia，缓存在 `data/chan_scan/`，7 天内不重复抓取；抓取失败时使用旧缓存。
+2. 一次 yfinance 批量请求下载一年复权日线（实测约 12 秒），不经过 OpenD，不消耗 moomoo 历史 K 线额度。
+3. 每只股票只算日线缠论快照。入选条件：最近 `--scan-max-age`（默认 5）根日线内出现、仍未失效、状态为 `confirmed` 或 `candidate` 的日线买点。`forming` 买点只记入 JSON，因为买入闸门不会据此给出买入。
+4. 排序：`confirmed` 优先，其次越新越靠前，再按最新收盘到失效价的距离从小到大；最多 `--scan-max`（默认 20）只送入 LLM。
+5. 扫描报告写入 `reports/chan_scan_YYYYMMDD.md`；`reports/chan_scan_YYYYMMDD.json` 记录全部近期有效买卖点（含卖点），便于日后统计命中率。
+
+```bash
+python main.py --scan sp500,nasdaq100 --scan-only        # 只出扫描报告，不调用 LLM
+python main.py --scan sp500 --scan-max 10 --no-notify    # 最多分析 10 只
+```
+
+说明：`--scan` 覆盖 `--stocks`/`STOCK_LIST`，不能与 `--portfolio` 同用，目前只支持一次性运行（不接入 `--schedule`）。仓库的 10 只股票事件研究（`evals/chan_event_study`）中，日线买点平均没有超额收益；扫描只是缩小 LLM 分析范围，不是买入信号。
 
 ### 指数一次性分析（Phase 1）
 

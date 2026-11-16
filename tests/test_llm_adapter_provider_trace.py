@@ -568,3 +568,13 @@ def test_parse_litellm_response_hmac_covers_tool_call_wire_messages(monkeypatch)
     assert first.usage["messages_hmac"]
     assert second.usage["messages_hmac"]
     assert first.usage["messages_hmac"] != second.usage["messages_hmac"]
+
+
+def test_importing_the_adapter_disables_litellm_streaming_logging() -> None:
+    # Per-chunk streaming success logging spins up asyncio loops on a 100-thread pool;
+    # on Windows those threads were seen blocking interpreter exit after a finished run.
+    import litellm
+
+    import src.agent.llm_adapter  # noqa: F401
+
+    assert litellm.disable_streaming_logging is True

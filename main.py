@@ -476,6 +476,34 @@ def parse_arguments() -> argparse.Namespace:
         help='运行 ETF 轮动：输出最新调仓信号与规则回测报告（不调用 LLM，配置见 ETF_ROTATION_*）'
     )
 
+    # === Chan index scan ===
+    parser.add_argument(
+        '--scan',
+        type=str,
+        default=None,
+        help='缠论日线预筛美股指数成分股（sp500、nasdaq100，逗号分隔），只把近期出现有效日线买点的股票送入 LLM 分析；覆盖 --stocks/STOCK_LIST'
+    )
+
+    parser.add_argument(
+        '--scan-max',
+        type=int,
+        default=20,
+        help='--scan 最多送入 LLM 分析的股票数（默认 20）'
+    )
+
+    parser.add_argument(
+        '--scan-max-age',
+        type=int,
+        default=5,
+        help='--scan 只保留最近 N 根日线内出现的买卖点（默认 5）'
+    )
+
+    parser.add_argument(
+        '--scan-only',
+        action='store_true',
+        help='--scan 只输出扫描报告，不调用 LLM 分析'
+    )
+
     return parser.parse_args()
 
 
@@ -1446,6 +1474,36 @@ def _run_analysis_with_runtime_scheduler_lock(
     return bool(lock_acquired and task_result["ok"])
 
 
+def _run_chan_scan_mode(config: Config, args: argparse.Namespace) -> int:
+    """``--scan``: daily Chan pre-screen of index constituents, then the normal
+    analysis on the selected tickers only (unless ``--scan-only``)."""
+    from src.chan.scan import run_chan_scan
+
+    if getattr(args, "portfolio", None):
+        logger.error("--scan 与 --portfolio 不能同时使用")
+        return 1
+    root = Path(__file__).resolve().parent
+    try:
+        result = run_chan_scan(
+            args.scan,
+            max_bars_since=max(0, args.scan_max_age),
+            max_candidates=max(0, args.scan_max),
+            report_dir=root / "reports",
+            cache_dir=root / "data" / "chan_scan",
+            language=getattr(config, "report_language", "zh"),
+        )
+    except (ValueError, RuntimeError) as exc:
+        logger.error("缠论扫描失败: %s", exc)
+        return 1
+    if getattr(args, "scan_only", False):
+        return 0
+    if not result.selected_codes:
+        logger.info("缠论扫描没有入选股票，跳过 LLM 分析")
+        return 0
+    ok = _run_analysis_with_runtime_scheduler_lock(config, args, list(result.selected_codes))
+    return 0 if ok else 1
+
+
 def start_api_server(host: str, port: int, config: Config) -> None:
     """
     在后台线程启动 FastAPI 服务
@@ -1599,7 +1657,8 @@ def _skips_stock_entry(args: argparse.Namespace, config: Config) -> bool:
     ``--stocks``/``STOCK_LIST`` tokens nor refresh the stock-index registry
     before the mode dispatch, otherwise an unsupported index token would
     wrongly block a run that never consumes it. Covered modes:
-    ``--backtest``, ``--market-review``, ``--etf-rotation``, ``--serve-only``/``--webui-only``,
+    ``--backtest``, ``--market-review``, ``--etf-rotation``, ``--scan`` (it builds its own
+    list), ``--serve-only``/``--webui-only``,
     ``--portfolio`` (any value) and ``--schedule``/``config.schedule_enabled``.
     ``--serve`` (not serve-only) and plain one-shot runs still consume the
     stock list and stay outside the guard. The webui-only flag is read
@@ -1610,6 +1669,7 @@ def _skips_stock_entry(args: argparse.Namespace, config: Config) -> bool:
         getattr(args, "backtest", False)
         or getattr(args, "etf_rotation", False)
         or getattr(args, "market_review", False)
+        or bool(getattr(args, "scan", None))
         or getattr(args, "serve_only", False)
         or getattr(args, "webui_only", False)
         or bool(getattr(args, "portfolio", None))
@@ -1952,6 +2012,10 @@ def main() -> int:
                 trigger_source="cli",
             )
             return 0 if market_review_result else 1
+
+        # 模式1.5: 缠论指数成分扫描（无 LLM 预筛，只分析入选股票）
+        if getattr(args, 'scan', None):
+            return _run_chan_scan_mode(config, args)
 
         # 模式2: 定时任务模式
         if args.schedule or config.schedule_enabled:

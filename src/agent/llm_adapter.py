@@ -54,6 +54,12 @@ from src.llm.provider_cache import (
 
 logger = logging.getLogger(__name__)
 
+# LiteLLM's streaming success logging runs asyncio.run() per chunk on a 100-thread
+# pool. On Windows each new event loop builds a localhost socket pair, and those
+# threads were seen blocked in accept(), hanging interpreter exit after the run had
+# finished. The project registers no LiteLLM callbacks or cache, so nothing is lost.
+litellm.disable_streaming_logging = True
+
 
 def _resolve_litellm_exception(name: str) -> type[BaseException]:
     """Return a catchable LiteLLM exception class even in stubbed test environments."""

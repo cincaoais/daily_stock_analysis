@@ -684,12 +684,30 @@ python main.py --etf-rotation         # ETF rotation signal + rule backtest (no 
 python main.py --no-market-review     # Stock analysis only
 python main.py --stocks 600519,300750 # Specify stocks
 python main.py --portfolio futu       # Use real Futu LONG stock holdings (overrides --stocks/STOCK_LIST)
+python main.py --scan sp500,nasdaq100 # Chan daily pre-screen of US index constituents, then analyze only the picks (see below)
 python main.py --dry-run              # Fetch data only, no AI analysis
 python main.py --no-notify            # Don't send notifications
 python main.py --schedule             # Scheduled task mode
 python main.py --debug                # Debug mode (verbose logging)
 python main.py --workers 5            # Specify concurrency
 ```
+
+### Chan index constituent scan (`--scan`)
+
+`--scan sp500,nasdaq100` first scans the S&P 500 and Nasdaq-100 constituents without any LLM call (about 520 unique tickers), then sends only the picks to the normal stock analysis:
+
+1. Constituent lists come from Wikipedia and are cached in `data/chan_scan/` for 7 days; if a fetch fails, the old cache is used.
+2. One bulk yfinance request downloads a year of adjusted daily bars (about 12 seconds in testing). OpenD is not used, so the moomoo historical K-line quota is untouched.
+3. Each ticker gets a daily-only Chan snapshot. A ticker is picked when it has a still-valid daily buy point in state `confirmed` or `candidate` that formed within the last `--scan-max-age` bars (default 5). `forming` buy points are only logged in the JSON, because the buy gate never turns them into a buy.
+4. Ranking: `confirmed` first, then most recent, then the smallest distance from the last close to the invalidation price. At most `--scan-max` tickers (default 20) go to the LLM.
+5. The scan report is written to `reports/chan_scan_YYYYMMDD.md`. `reports/chan_scan_YYYYMMDD.json` records every recent valid point, sell points included, so the hit rate can be measured later.
+
+```bash
+python main.py --scan sp500,nasdaq100 --scan-only        # Scan report only, no LLM call
+python main.py --scan sp500 --scan-max 10 --no-notify    # Analyze at most 10 picks
+```
+
+Notes: `--scan` overrides `--stocks`/`STOCK_LIST`, cannot be combined with `--portfolio`, and runs once only (it is not wired into `--schedule`). In the repo's 10-symbol event study (`evals/chan_event_study`) daily buy points showed no excess return on average; the scan narrows what the LLM looks at and is not a buy signal by itself.
 
 ### One-shot index analysis (Phase 1)
 

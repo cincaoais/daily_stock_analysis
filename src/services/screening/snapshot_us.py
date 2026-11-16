@@ -21,6 +21,14 @@ from src.core.trading_calendar import MARKET_TIMEZONE
 logger = logging.getLogger(__name__)
 
 _SP500_WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+_NASDAQ100_WIKI_URL = "https://en.wikipedia.org/wiki/List_of_NASDAQ-100_companies"
+# Wikipedia answers 403 to urllib's default User-Agent; it asks clients to identify themselves.
+_WIKI_HEADERS = {"User-Agent": "daily-stock-analysis/1.0 (https://github.com/ZhuLinsen/daily_stock_analysis)"}
+# Index name -> (Wikipedia list page, ticker column)
+INDEX_CONSTITUENT_SOURCES = {
+    "sp500": (_SP500_WIKI_URL, "Symbol"),
+    "nasdaq100": (_NASDAQ100_WIKI_URL, "Ticker"),
+}
 
 _DEFAULT_US_UNIVERSE = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B",
@@ -66,12 +74,22 @@ def fetch_us_universe(source: str = "auto") -> list[str]:
         raise ValueError(f"Unknown US universe source: {source}")
 
 
+def fetch_index_tickers(index: str, *, timeout: float = 20.0) -> list[str]:
+    """Constituent tickers of ``sp500`` or ``nasdaq100`` from Wikipedia, in exchange form (``BRK.B``)."""
+    import requests
+    from io import StringIO
+
+    url, column = INDEX_CONSTITUENT_SOURCES[index]
+    response = requests.get(url, headers=_WIKI_HEADERS, timeout=timeout)
+    response.raise_for_status()
+    for tbl in pd.read_html(StringIO(response.text)):
+        if column in tbl.columns:
+            return sorted({str(t).strip().upper() for t in tbl[column].dropna() if str(t).strip()})
+    raise RuntimeError(f"Could not find {column} column in the {index} Wikipedia table")
+
+
 def _fetch_sp500_tickers() -> list[str]:
-    tables = pd.read_html(_SP500_WIKI_URL)
-    for tbl in tables:
-        if "Symbol" in tbl.columns:
-            return sorted(tbl["Symbol"].dropna().str.strip().str.replace(".", "-", regex=False).tolist())
-    raise RuntimeError("Could not find Symbol column in S&P 500 Wikipedia table")
+    return [t.replace(".", "-") for t in fetch_index_tickers("sp500")]
 
 
 def fetch_us_snapshot(
