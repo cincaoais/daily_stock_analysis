@@ -1045,6 +1045,9 @@ class Config:
 
     # Unified temperature for all LLM calls (LLM_TEMPERATURE); legacy per-provider temps are fallback only
     llm_temperature: float = 0.7
+    # LLM_JSON_MODE: send response_format={"type":"json_object"} on the stock analysis call
+    # (retried once without it when a model rejects JSON mode). Off by default.
+    llm_json_mode: bool = False
 
     # Provider prompt-cache controls. These do not control provider implicit cache.
     llm_prompt_cache_telemetry_enabled: bool = True
@@ -1980,6 +1983,7 @@ class Config:
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),
+            llm_json_mode=parse_env_bool(os.getenv("LLM_JSON_MODE"), default=False),
             litellm_config_path=litellm_config_path,
             llm_models_source=llm_models_source,
             llm_channels=llm_channels,

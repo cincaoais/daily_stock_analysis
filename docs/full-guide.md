@@ -264,6 +264,7 @@ daily_stock_analysis/
 | `AGENT_CONTEXT_COMPRESSION_TRIGGER_TOKENS` | 历史 token 估算超过该值时触发压缩；留空则跟随 profile preset | - | 否 |
 | `AGENT_CONTEXT_PROTECTED_TURNS` | 压缩时最近 N 个用户轮次及其后的回复保留原文；留空则跟随 profile preset | - | 否 |
 | `LITELLM_FALLBACK_MODELS` | 备选模型，逗号分隔 | - | 否 |
+| `LLM_JSON_MODE` | 个股分析请求附带 `response_format={"type":"json_object"}`，让 OpenAI 兼容模型直接返回纯 JSON；模型明确拒绝 JSON 模式时同一模型自动去掉该参数重试一次（超时不重试），返回结果仍经过原有 JSON 与字段完整性校验。仅作用于默认个股分析，不影响 Agent / 大盘复盘 | `false` | 否 |
 | `LLM_CHANNELS` | 渠道名称列表（逗号分隔），配合 `LLM_{NAME}_*` 使用，详见 [LLM 配置指南](LLM_CONFIG_GUIDE.md) | - | 否 |
 | `MODELFLARE_KEY` | Modelflare 单 Key 接入，自动启用默认渠道；Actions 仅从 Secrets 读取 | - | 选用时 |
 | `LLM_MODELFLARE_API_KEY` | 高级渠道 Key，优先于 MODELFLARE_KEY；多 Key 可用 `LLM_MODELFLARE_API_KEYS` | - | 否 |

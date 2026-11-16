@@ -51,7 +51,11 @@ from src.llm.hermes import (
     sanitize_hermes_error_text,
 )
 from src.llm.generation_params import apply_litellm_generation_params
-from src.llm.errors import call_litellm_with_param_recovery
+from src.llm.errors import (
+    JSON_OBJECT_RESPONSE_FORMAT,
+    call_litellm_with_param_recovery,
+    call_with_json_mode_fallback,
+)
 from src.llm.backend_registry import (
     LOCAL_CLI_GENERATION_BACKEND_IDS,
     LITELLM_BACKEND_ID,
@@ -3896,28 +3900,39 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                 call_kwargs = hint_result.call_kwargs
                 if requested_timeout not in (None, ""):
                     call_kwargs["timeout"] = requested_timeout
+                if generation_config.get("json_mode"):
+                    call_kwargs["response_format"] = dict(JSON_OBJECT_RESPONSE_FORMAT)
                 if hint_result.diagnostics:
                     logger.debug("[PromptCache] %s", hint_result.diagnostics)
+
+                def _complete(kwargs: Dict[str, Any], *, cache_recovery: bool = True) -> Any:
+                    """One LiteLLM call with parameter recovery, then a JSON-mode-off retry if rejected."""
+                    return call_with_json_mode_fallback(
+                        lambda effective: call_litellm_with_param_recovery(
+                            lambda dispatch_kwargs: self._dispatch_litellm_completion(
+                                model,
+                                dispatch_kwargs,
+                                config=config,
+                                use_channel_router=use_channel_router,
+                                router_model_names=router_model_names,
+                            ),
+                            model=model,
+                            call_kwargs=effective,
+                            model_list=recovery_model_list,
+                            cache_recovery=cache_recovery,
+                            logger=logger,
+                        ),
+                        kwargs,
+                        model=model,
+                        logger=logger,
+                    )
 
                 _stream_text: Optional[str] = None
                 _stream_usage: Dict[str, Any] = {}
 
                 if model_stream:
                     try:
-                        stream_response = call_litellm_with_param_recovery(
-                            lambda kwargs: self._dispatch_litellm_completion(
-                                model,
-                                kwargs,
-                                config=config,
-                                use_channel_router=use_channel_router,
-                                router_model_names=router_model_names,
-                            ),
-                            model=model,
-                            call_kwargs={**call_kwargs, "stream": True},
-                            model_list=recovery_model_list,
-                            cache_recovery=False,
-                            logger=logger,
-                        )
+                        stream_response = _complete({**call_kwargs, "stream": True}, cache_recovery=False)
                         _stream_text, _stream_usage = self._consume_litellm_stream(
                             stream_response,
                             model=model,
@@ -3965,19 +3980,7 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                         response_validator(_stream_text)
                     return _stream_text, actual_model, _stream_usage
 
-                response = call_litellm_with_param_recovery(
-                    lambda kwargs: self._dispatch_litellm_completion(
-                        model,
-                        kwargs,
-                        config=config,
-                        use_channel_router=use_channel_router,
-                        router_model_names=router_model_names,
-                    ),
-                    model=model,
-                    call_kwargs=call_kwargs,
-                    model_list=recovery_model_list,
-                    logger=logger,
-                )
+                response = _complete(call_kwargs)
 
                 response_model, response_provider = self._resolve_response_model_provider(
                     response,
@@ -4342,6 +4345,10 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                 "temperature": config.llm_temperature,
                 "max_output_tokens": 8192,
             }
+            if getattr(config, "llm_json_mode", False):
+                # Ask OpenAI-compatible providers for bare JSON; the dashboard
+                # validator still checks the contract after the call.
+                generation_config["json_mode"] = True
 
             logger.info(f"[LLM调用] 开始调用 {model_name}...")
             _emit_progress(68, f"{name}：LLM 已接收请求，等待响应")

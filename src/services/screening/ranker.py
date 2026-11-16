@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass
 
 from src.config import apply_litellm_api_surface
-from src.llm.errors import call_litellm_with_param_recovery
+from src.llm.errors import call_litellm_with_param_recovery, is_json_mode_unsupported
 from src.llm.generation_params import apply_litellm_generation_params
 from src.services.screening.models import Pick
 from src.services.screening.normalize import (
@@ -720,16 +720,7 @@ def _coerce_completion_content(value: object) -> str:
 
 def _is_json_mode_unsupported(exc: Exception) -> bool:
     """Return True only for provider errors that clearly reject JSON mode."""
-    if _is_timeout_error(exc):
-        return False
-    text = str(exc).lower()
-    return (
-        "response_format" in text
-        or "json mode" in text
-        or "json_object" in text
-        or ("not support" in text and "json" in text)
-        or ("unsupported" in text and "json" in text)
-    )
+    return is_json_mode_unsupported(exc)
 
 
 def _is_timeout_error(exc: Exception) -> bool:

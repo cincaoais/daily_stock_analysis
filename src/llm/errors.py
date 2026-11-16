@@ -112,6 +112,49 @@ def classify_litellm_generation_param_error(
     return None
 
 
+JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
+_TIMEOUT_MARKERS = ("timeout", "timed out", "readtimeout", "apitimeout")
+
+
+def is_json_mode_unsupported(exc: Exception) -> bool:
+    """True only for provider errors that clearly reject JSON mode (never for timeouts)."""
+    text = str(exc).lower()
+    if any(marker in text for marker in _TIMEOUT_MARKERS):
+        return False
+    return (
+        "response_format" in text
+        or "json mode" in text
+        or "json_object" in text
+        or ("not support" in text and "json" in text)
+        or ("unsupported" in text and "json" in text)
+    )
+
+
+def call_with_json_mode_fallback(
+    call: Callable[[Dict[str, Any]], Any],
+    call_kwargs: Dict[str, Any],
+    *,
+    model: str,
+    logger: Optional[Any] = None,
+    log_label: str = "[LiteLLM]",
+) -> Any:
+    """Run ``call(call_kwargs)``; if the provider rejects ``response_format``, retry once without it.
+
+    Timeouts and connection errors are re-raised untouched: an OpenAI-compatible server may
+    keep generating after the client gives up, so a blind retry could duplicate the work.
+    """
+    try:
+        return call(call_kwargs)
+    except Exception as exc:
+        if "response_format" not in call_kwargs or not is_json_mode_unsupported(exc):
+            raise
+        if logger is not None:
+            logger.warning("%s %s rejected JSON mode, retrying once without response_format", log_label, model)
+        retry_kwargs = dict(call_kwargs)
+        retry_kwargs.pop("response_format", None)
+        return call(retry_kwargs)
+
+
 def call_litellm_with_param_recovery(
     call: Callable[[Dict[str, Any]], Any],
     *,

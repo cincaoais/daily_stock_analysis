@@ -235,6 +235,7 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 | `AGENT_CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Estimated-history token threshold; blank follows the selected profile preset | - | No |
 | `AGENT_CONTEXT_PROTECTED_TURNS` | Number of recent user turns and following replies kept verbatim; blank follows the selected profile preset | - | No |
 | `LITELLM_FALLBACK_MODELS` | Fallback models, comma-separated | - | No |
+| `LLM_JSON_MODE` | Send `response_format={"type":"json_object"}` with the stock analysis request so OpenAI-compatible models return bare JSON; if a model explicitly rejects JSON mode, the same model is retried once without it (timeouts are not retried), and the reply still goes through the existing JSON and field-integrity checks. Applies only to the default stock analysis, not Agent or market review | `false` | No |
 | `LLM_CHANNELS` | Channel names (comma-separated), use with `LLM_{NAME}_*`, see [LLM Config Guide](LLM_CONFIG_GUIDE_EN.md) | - | No |
 | `MODELFLARE_KEY` | Modelflare one-key setup; enables the default channel automatically; Actions reads it from Secrets only | - | For Modelflare |
 | `LLM_MODELFLARE_API_KEY` | Advanced channel key, overrides MODELFLARE_KEY; use `LLM_MODELFLARE_API_KEYS` for multiple keys | - | No |
