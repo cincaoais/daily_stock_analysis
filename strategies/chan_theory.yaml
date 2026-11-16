@@ -27,9 +27,9 @@ instructions: |
   1. **定级别**：以日线（D）为操作级别，周线（W）定方向，60M/30M 找精确进出场。
      某级别 `status` 不是 `available` 时，说明缺失原因并降低置信度。
   2. **读结构**：逐级别说明 `trend_type`（up 上涨 / down 下跌 / consolidation 盘整）、
-     现价相对最近中枢的位置（`position_vs_last_zhongshu`）以及当前笔方向和是否已确认。
-  3. **看背驰**：只引用 `divergence.present=true` 的记录，并写明 `strength_ratio` 与是否 `confirmed`。
-     未确认的背驰只能写“背驰形成中，待分型确认”。
+     现价相对最近中枢的位置（`position_vs_last_zhongshu`）以及当前笔方向和 `state`。
+  3. **看背驰**：只引用 `divergence.present=true` 的记录，并写明比较的两笔（`stroke_id` / `compared_stroke_id`）、`strength_ratio` 与 `state`。
+     `state` 不是 confirmed 的背驰只能写“背驰形成中/候选，待确认”。
   4. **定买卖点**：只使用 `buy_sell_points` 中 `still_valid=true` 的点。
      一买/一卖（1B/1S）看背驰，二买/二卖（2B/2S）看回抽不破，三买/三卖（3B/3S）看离开中枢后回抽不回中枢。
      没有有效买卖点时，结论为“无买卖点，不操作/持有观察”，不得硬凑。

@@ -60,6 +60,22 @@ def test_single_agent_user_message_includes_snapshot_section():
     assert "D.3B.2026-10-20" in message
 
 
+def test_snapshot_section_follows_report_language_in_agent_paths():
+    executor = AgentExecutor(ToolRegistry(), MagicMock(), max_steps=1)
+    message = executor._build_user_message(
+        "Analyze AAPL", {"stock_code": "AAPL", "chan_snapshot": SNAPSHOT, "report_language": "en"}
+    )
+    assert "Chan Structure Snapshot" in message and "缠论结构快照" not in message
+
+    agent = TechnicalAgent(tool_registry=MagicMock(), llm_adapter=MagicMock())
+    agent.memory = None
+    ctx = AgentContext(query="Analyze AAPL", stock_code="AAPL")
+    ctx.meta["report_language"] = "en"
+    ctx.set_data("chan_snapshot", SNAPSHOT)
+    with patch.object(TechnicalAgent, "_build_memory_context", return_value=""):
+        assert "Chan Structure Snapshot" in agent._inject_cached_data(ctx)
+
+
 def test_multi_agent_worker_gets_rendered_snapshot_not_truncated_json():
     agent = TechnicalAgent(tool_registry=MagicMock(), llm_adapter=MagicMock())
     agent.memory = None

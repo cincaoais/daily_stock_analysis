@@ -29,7 +29,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "chan_snapshot/1.0"
+SCHEMA_VERSION = "chan_snapshot/1.1"  # 1.1: `state` replaces `confirmed`; adds as_of, level_roles
 ENGINE_NAME = "czsc"
 
 # Repo timeframe -> czsc frequency label / snapshot level key, coarse to fine.
@@ -394,7 +394,28 @@ def _fmt_dt(value: pd.Timestamp, timeframe: str) -> str:
     return pd.Timestamp(value).strftime(fmt)
 
 
-def _stroke_dict(stroke: Stroke, level: str, timeframe: str) -> Dict[str, Any]:
+def _last_finished_index(strokes: Sequence[Stroke]) -> Optional[int]:
+    for i in range(len(strokes) - 1, -1, -1):
+        if strokes[i].confirmed:
+            return i
+    return None
+
+
+def stroke_state(strokes: Sequence[Stroke], index: int) -> str:
+    """Stability of ``strokes[index]``: forming / candidate / confirmed.
+
+    czsc may still redraw or remove the newest finished stroke; strokes that already
+    have a newer finished stroke after them were never revised in the repaint audit,
+    so only those are ``confirmed``.
+    """
+    if not strokes[index].confirmed:
+        return "forming"
+    if index == _last_finished_index(strokes):
+        return "candidate"
+    return "confirmed"
+
+
+def _stroke_dict(stroke: Stroke, level: str, timeframe: str, state: str) -> Dict[str, Any]:
     start, end = stroke.start_price, stroke.end_price
     return {
         "id": "%s.bi.%s" % (level, _fmt_dt(stroke.end_dt, timeframe)),
@@ -405,7 +426,7 @@ def _stroke_dict(stroke: Stroke, level: str, timeframe: str) -> Dict[str, Any]:
         "end_price": _price(end),
         "amplitude_pct": round((end - start) / start * 100.0, 2) if start else None,
         "macd_area": round(stroke.macd_area, 4),
-        "confirmed": stroke.confirmed,
+        "state": state,
     }
 
 
@@ -421,7 +442,9 @@ def _pivot_dict(pivot: Pivot, timeframe: str) -> Dict[str, Any]:
     }
 
 
-def _point_dict(point: TradePoint, frame: pd.DataFrame, level: str, timeframe: str) -> Dict[str, Any]:
+def _point_dict(
+    point: TradePoint, frame: pd.DataFrame, level: str, timeframe: str, state: str
+) -> Dict[str, Any]:
     after = frame[frame["date"] > point.dt]
     is_buy = point.kind.endswith("B")
     if after.empty:
@@ -439,7 +462,7 @@ def _point_dict(point: TradePoint, frame: pd.DataFrame, level: str, timeframe: s
         "price": _price(point.price),
         "invalidation_price": _price(point.invalidation_price),
         "basis": point.basis,
-        "confirmed": point.confirmed,
+        "state": state if still_valid else "invalidated",
         "still_valid": still_valid,
         "bars_since": int(len(after)),
     }
@@ -469,7 +492,7 @@ def _latest_divergence(strokes: Sequence[Stroke], level: str, timeframe: str) ->
             "strength_ratio": found["strength_ratio"],
             "stroke_id": "%s.bi.%s" % (level, _fmt_dt(strokes[index].end_dt, timeframe)),
             "compared_stroke_id": "%s.bi.%s" % (level, _fmt_dt(strokes[index - 2].end_dt, timeframe)),
-            "confirmed": found["confirmed"],
+            "state": stroke_state(strokes, index),
         }
     return {"present": False, "method": "macd_area"}
 
@@ -533,10 +556,11 @@ def build_level_snapshot(df: Optional[pd.DataFrame], timeframe: str, symbol: str
 
     first_reported = max(len(strokes) - POINT_LOOKBACK_BIS, 0)
     points = [
-        _point_dict(p, frame, level, timeframe)
+        _point_dict(p, frame, level, timeframe, stroke_state(strokes, p.stroke_index))
         for p in detect_trade_points(strokes, pivots)
         if p.stroke_index >= first_reported
     ]
+    last_finished = _last_finished_index(strokes)
 
     position = None
     if pivots:
@@ -559,9 +583,16 @@ def build_level_snapshot(df: Optional[pd.DataFrame], timeframe: str, symbol: str
         "last_close": _price(last_close),
         "trend_type": classify_trend(pivots),
         "position_vs_last_zhongshu": position,
-        "current_bi": _stroke_dict(forming, level, timeframe) if forming else None,
-        "last_confirmed_bi": _stroke_dict(confirmed[-1], level, timeframe) if confirmed else None,
-        "recent_bis": [_stroke_dict(s, level, timeframe) for s in strokes[-RECENT_BI_COUNT:]],
+        "current_bi": _stroke_dict(forming, level, timeframe, "forming") if forming else None,
+        "last_confirmed_bi": (
+            _stroke_dict(strokes[last_finished], level, timeframe, "candidate")
+            if last_finished is not None else None
+        ),
+        "recent_bis": [
+            _stroke_dict(s, level, timeframe, stroke_state(strokes, i))
+            for i, s in enumerate(strokes)
+            if i >= len(strokes) - RECENT_BI_COUNT
+        ],
         "segment": {"status": "not_supported"},
         "zhongshu": [_pivot_dict(p, timeframe) for p in pivots[-RECENT_ZHONGSHU_COUNT:]],
         "divergence": _latest_divergence(strokes, level, timeframe),
@@ -589,6 +620,27 @@ def _cross_level(levels: Mapping[str, Dict[str, Any]]) -> Dict[str, Any]:
     if ups != downs:
         aligned = "up" if ups > downs else "down"
     return {"resonance": resonance, "aligned_direction": aligned, "bi_directions": directions}
+
+
+_LEVEL_ORDER = ("W", "D", "60M", "30M")
+
+
+def _level_roles(levels: Mapping[str, Dict[str, Any]]) -> Dict[str, Optional[str]]:
+    """Which level sets direction, which one carries the trade points, which one times entries.
+
+    Daily is the operating level when usable; the next higher usable level gives direction
+    and the next lower usable level confirms. Unusable (missing/error) levels are skipped.
+    """
+    usable = [k for k in _LEVEL_ORDER if levels.get(k, {}).get("status") in ("available", "partial")]
+    if not usable:
+        return {"direction": None, "operating": None, "confirmation": None}
+    operating = "D" if "D" in usable else usable[0]
+    pos = usable.index(operating)
+    return {
+        "direction": usable[pos - 1] if pos > 0 else None,
+        "operating": operating,
+        "confirmation": usable[pos + 1] if pos + 1 < len(usable) else None,
+    }
 
 
 def build_chan_snapshot(
@@ -622,11 +674,14 @@ def build_chan_snapshot(
     else:
         overall = "missing"
     versions = sorted({lv["engine_version"] for lv in levels.values() if lv.get("engine_version")})
+    last_bars = [lv["last_bar"] for lv in levels.values() if lv.get("last_bar")]
     return {
         "schema_version": SCHEMA_VERSION,
         "symbol": symbol,
         "name": name,
         "market": market,
+        "as_of": max(last_bars) if last_bars else None,
+        "level_roles": _level_roles(levels),
         "data_quality": {
             "status": overall,
             "engine": ENGINE_NAME,

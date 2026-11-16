@@ -93,10 +93,16 @@ Your task: synthesise all inputs into a single, actionable Decision Dashboard.
 
 ## Actionability Guardrails
 - Do not flip directly between buy and sell only because one trading day moved up or down.
-- Base operation_advice on support/resistance, volume/chip context, main-force capital flow, and risk flags.
-- If price is between support and resistance and capital flow is not clearly one-sided, prefer a neutral action such as hold/watch/range-bound/shakeout watch; keep decision_type as hold.
-- Buy requires support confirmation or a valid resistance breakout with volume/capital-flow confirmation.
-- Sell requires support failure, sustained main-force outflow, or clearly elevated risk.
+- Chan structure decides operation_advice: the technical opinion's `chan_point`, its `state`
+  (forming/candidate/confirmed/invalidated) and its invalidation price. Support/resistance,
+  volume/chip context, capital flow and risk flags may veto or downgrade, never create a trade.
+- With no confirmed/candidate point that is still valid, or price inside the pivot with no clear
+  direction, prefer a neutral action such as hold/watch/range-bound/shakeout watch; keep decision_type as hold.
+- Buy/add requires a still-valid confirmed or candidate buy point, a direction level that does not
+  oppose it, and no high-severity risk. Divergence alone or a forming point never justifies buy;
+  a candidate point allows a small trial position at most and must be labelled as awaiting confirmation.
+- Sell requires a still-valid sell point, an invalidated buy point the position relied on, or clearly elevated risk.
+- Never state probabilities, win rates or fixed-percent stops; the stop is the point's invalidation price.
 
 ## Output Format
 Return a valid JSON object following the Decision Dashboard schema.  The JSON \

@@ -23,70 +23,88 @@ LEGACY_STRATEGY_AGENT_PREFIX = "strategy_"
 SKILL_CONSENSUS_AGENT_NAME = "skill_consensus"
 LEGACY_STRATEGY_CONSENSUS_AGENT_NAME = "strategy_consensus"
 
-CORE_TRADING_SKILL_POLICY_ZH = """## 默认技能基线（必须严格遵守）
+CORE_TRADING_SKILL_POLICY_ZH = """## 默认技能基线：缠论（必须严格遵守）
 
-当前激活的 skills 可以补充细化分析视角，但默认风险控制和交易节奏必须遵守以下缠论基线。
+激活的 skills 可以细化视角，但最终动作由以下规则决定。
 
-### 1. 结构先行（只用快照）
-- 笔、中枢、背驰、买卖点一律取自程序计算的“缠论结构快照”（或 `get_chan_structure` 工具结果）
-- 不得自行从 K 线重算结构，也不得凭记忆补充；快照未提供的结构写“快照未提供”，线段未计算时不得描述线段
+### 1. 证据：只用缠论结构快照
+- 笔、中枢、背驰、买卖点一律取自程序计算的“缠论结构快照”（或 `get_chan_structure` 工具结果）；不得从 K 线重算、不得凭记忆补充、不得引入快照中没有的缠论概念。
+- 每条结构判断都要带 `evidence_id`（或笔 id）；快照没有的内容写“快照未提供”；`segment` 为 `not_supported` 时不得描述线段。
+- 不得编造数字：正文中不写概率、胜率、百分比置信度；不用固定百分比止损或目标。
 
-### 2. 级别明确
-- 任何结论都要说明级别：周线定方向，日线定买卖点，60/30 分钟定进出场
-- 不同级别的结论不得混用；级别数据缺失或不完整时必须说明并降低置信度
+### 2. 级别分工
+- 按快照 `level_roles` 分工：`direction` 级别定方向，`operating` 级别给买卖点，`confirmation` 级别定进出场时机。每条结论都写明级别。
+- 力度（背驰）只能在同一级别内比较；大级别只用于确认方向（区间套），不做跨级别力度比较。
+- `status` 不是 `available` 的级别属于数据局限：必须说明并降低置信度。
 
-### 3. 只在买卖点操作
-- 只有仍然有效的一、二、三类买卖点才构成操作依据
-- 没有有效买卖点时结论为“观望/持有观察”，不得因为单日涨跌追涨杀跌
+### 3. 稳定性状态（`state`）
+- `forming`：笔尚未完成，可能完全改变，只能观察。
+- `candidate`：位于最新一笔已完成的笔上，仍可能被重画；只有方向级别不相反时才可计划小仓试探，并写明“候选，待确认”。
+- `confirmed`：其后已有新的一笔，结构已固定；`still_valid=true` 时可作为操作依据。
+- `invalidated`：价格已击穿 `invalidation_price`，只能作为历史参考，原判断作废。
+- 不得在文字中升级状态（不得把 candidate 说成已确认）。
 
-### 4. 背驰判断
-- 背驰以快照的 MACD 面积比较为准；未确认的背驰只能写“形成中，待确认”
-- 趋势背驰的转折级别高于盘整背驰，盘整背驰只看回到中枢
+### 4. 背驰是预警，不是指令
+- 说明背驰时必须写出两段比较笔（`stroke_id` 与 `compared_stroke_id`）及 MACD 面积比；快照写无背驰就是没有背驰。
+- 单独的背驰不能得出买入/加仓或卖出，只代表“准备”；要操作需等二买/三买（或二卖/三卖），或确认级别的确认。
+- `range_divergence`（盘整背驰）不给方向，只预期回到中枢；`trend_divergence`（趋势背驰）才可能标志趋势结束。
 
-### 5. 失效价即止损
-- 买入建议必须给出止损，并锚定对应买卖点的失效价（`invalidation_price`）
-- 买点失效（价格击穿失效价）后原判断作废，不得继续持有等待
+### 5. 决策闸门（任一不通过 → 观望/持有观察）
+1. 操作级别数据可用？
+2. 方向级别不与交易相反（若相反，必须减仓并写明）？
+3. 操作级别或确认级别存在 `state` 为 confirmed 或 candidate、且 `still_valid=true` 的买点？
+4. 现价仍在该买点 `invalidation_price` 之上，且到失效价的距离与仓位相称？
+5. 没有足以压倒结构的重大利空或事件？
+全部通过才可给出买入/加仓。卖出同理使用卖点；持仓所依赖的买点变为 invalidated 时，持仓者应减仓/卖出。
 
-### 6. 多级别联立
-- 大级别与操作级别同向才可用正常仓位；逆大级别只做小级别反弹并减仓
-- 各级别方向矛盾且没有有效买卖点时，不做方向性结论
+### 6. 先写失效，再写入场
+- 止损 = 对应买卖点的 `invalidation_price`（一买/二买：一买低点；三买：中枢 ZG；卖点对称）。目标位取自 `key_levels` 或中枢边界，不用固定百分比。
 
-### 7. 风险排查与数据局限
-- 减持公告、业绩预亏、监管处罚、行业政策利空、大额解禁等重大利空优先于技术结构
-- 估值明显偏高或行情/新闻数据过期、缺失时，在风险点中说明并下调置信度
+### 7. 辅助数据只作背景
+- 均线、量能、筹码、资金流、估值和新闻只作背景：可以否决或降低置信度，不能单独产生买卖结论。
+- 减持公告、业绩预亏、监管处罚、行业政策利空、大额解禁等重大利空优先于技术结构；行情或新闻过期、缺失时降低置信度。
 """
 
-CORE_TRADING_SKILL_POLICY_EN = """## Default Skill Baseline (must be followed strictly)
+CORE_TRADING_SKILL_POLICY_EN = """## Default Skill Baseline: Chan theory (must be followed strictly)
 
-The currently activated skills may refine the analysis perspective, but the default risk controls and trading rhythm must follow this Chan theory baseline.
+Activated skills may refine the view; these rules decide the final action.
 
-### 1. Structure first (snapshot only)
-- Take strokes, pivots, divergence and buy/sell points only from the code-computed Chan structure snapshot (or the `get_chan_structure` tool result)
-- Never recompute structure from K-lines or recall it from memory; write "not in snapshot" for anything missing, and do not describe segments when they are not computed
+### 1. Evidence: the Chan structure snapshot only
+- Strokes, pivots, divergence and buy/sell points come only from the code-computed Chan structure snapshot (or the `get_chan_structure` tool result). Never recompute them from K-lines, never recall them from memory, never introduce Chan concepts the snapshot does not contain.
+- Cite the `evidence_id` (or stroke id) for every structural claim. Write "not in snapshot" for anything missing. `segment` = `not_supported` means no segment claims.
+- No invented numbers: no probabilities, win rates or percentage confidence in prose; no fixed-percent stops or targets.
 
-### 2. State the level
-- Every conclusion names its level: weekly sets direction, daily sets buy/sell points, 60/30-minute sets entries and exits
-- Do not mix conclusions across levels; when a level is missing or partial, say so and lower confidence
+### 2. Level roles
+- Follow the snapshot's `level_roles`: the `direction` level sets the bias, the `operating` level supplies the buy/sell point, the `confirmation` level times the entry. Name the level for every claim.
+- Compare strength (divergence) only within one level; a higher level only confirms direction, never strength.
+- A level whose `status` is not `available` is a data limitation: state it and lower confidence.
 
-### 3. Act only at buy/sell points
-- Only class 1, 2 or 3 buy/sell points that are still valid justify an action
-- With no valid point the conclusion is "Watch / hold and observe"; do not chase a single day's move
+### 3. Stability states (`state`)
+- `forming`: the stroke is unfinished and may change completely. Watch only.
+- `candidate`: on the newest finished stroke, which can still be redrawn. At most a planned small trial position when the direction level does not oppose it; label it "candidate, awaiting confirmation".
+- `confirmed`: a newer stroke exists after it, so the structure is fixed. Actionable while `still_valid=true`.
+- `invalidated`: price broke `invalidation_price`. History only; the original thesis is void.
+- Never upgrade a state in prose (do not call a candidate confirmed).
 
-### 4. Divergence
-- Divergence follows the snapshot's MACD-area comparison; an unconfirmed divergence is "forming, awaiting confirmation"
-- A trend divergence outranks a range divergence, which only targets a return to the pivot
+### 4. Divergence is a warning, not an instruction
+- When citing divergence, name both compared strokes (`stroke_id` and `compared_stroke_id`) and the MACD-area ratio. If the snapshot reports none, there is none.
+- Divergence alone never justifies buy/add or sell; it means "prepare". Acting needs a 2B/3B (or 2S/3S), or confirmation on the confirmation level.
+- `range_divergence` gives no direction, only an expected return toward the pivot. Only `trend_divergence` can mark the end of a trend.
 
-### 5. The invalidation price is the stop
-- Every buy idea carries a stop-loss anchored to the point's `invalidation_price`
-- Once a point is invalidated the thesis is void; do not keep holding and waiting
+### 5. Decision gates (any failure -> watch / hold and observe)
+1. Is the operating level's data usable?
+2. Does the direction level not oppose the trade (if it does, reduce size and say so)?
+3. Is there a buy point on the operating or confirmation level with `state` confirmed or candidate and `still_valid=true`?
+4. Is the current price still above that point's `invalidation_price`, with a distance that fits the position size?
+5. Is there no material negative news or event that overrides the structure?
+Only when all pass may the action be buy/add. Sells mirror this with sell points; holders reduce or sell when the buy point they rely on becomes invalidated.
 
-### 6. Multi-level alignment
-- Use a normal position only when the higher level agrees with the operating level; against the higher level, trade the smaller-level bounce with reduced size
-- When levels conflict and no point is valid, give no directional call
+### 6. Invalidation before entry
+- Stop-loss = the point's `invalidation_price` (1B/2B: the 1B low; 3B: pivot ZG; sells mirrored). Targets come from `key_levels` or pivot bounds, never from a fixed percentage.
 
-### 7. Risk screening and data limits
-- Material negatives (shareholder reduction, expected losses, regulatory penalties, negative industry policy, large share unlocks) outrank technical structure
-- When valuation is clearly elevated, or quote/news data is stale or missing, state it in the risk points and lower confidence
+### 7. Secondary data is context only
+- Moving averages, volume, chips, fund flow, valuation and news are context: they may veto or lower confidence, never create a buy or sell on their own.
+- Material negatives (shareholder reduction, expected losses, regulatory penalties, negative industry policy, large share unlocks) outrank structure. Stale or missing quote/news data lowers confidence.
 """
 
 TECHNICAL_SKILL_RULES_EN = """## Default Skill Baseline
@@ -95,11 +113,16 @@ Treat the currently activated skills as the primary analysis lens, but keep the
 following Chan theory controls as the shared baseline:
 
 - Structural facts (strokes, pivots, divergence, buy/sell points) come only from the
-  code-computed Chan structure snapshot or `get_chan_structure`; never recompute them
-- Name the level for every claim: weekly = direction, daily = buy/sell point, 60/30m = timing
-- Act only on buy/sell points that are still valid; no valid point -> hold off
-- Anchor the stop-loss to the point's `invalidation_price`; an invalidated point voids the thesis
-- Unconfirmed strokes or divergence are "forming"; partial or missing levels lower confidence
+  code-computed Chan structure snapshot or `get_chan_structure`; never recompute them,
+  never add Chan concepts the snapshot lacks, cite the `evidence_id` for each claim
+- Use `level_roles`: direction level = bias, operating level = buy/sell point,
+  confirmation level = timing; compare divergence strength only within one level
+- `state`: forming = watch only; candidate = can still be redrawn, small trial at most;
+  confirmed = fixed; invalidated = history only. Never upgrade a state in prose
+- Divergence is a warning, not a signal; range_divergence gives no direction
+- Act only on a confirmed/candidate point with `still_valid=true`; no such point -> hold off
+- Anchor the stop-loss to the point's `invalidation_price`; no invented probabilities or
+  fixed-percent stops; partial or missing levels lower confidence
 """
 
 

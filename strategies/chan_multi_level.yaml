@@ -18,7 +18,7 @@ instructions: |
   依据缠论结构快照的 `levels`（W / D / 60M / 30M）与 `cross_level`。
 
   判断要点：
-  1. **自上而下**：先写周线的 `trend_type` 和当前笔方向，再写日线，最后写 60M/30M；每一级都注明是否 `confirmed`。
+  1. **自上而下**：先写周线的 `trend_type` 和当前笔方向，再写日线，最后写 60M/30M；每一级都注明当前笔与买卖点的 `state`（forming/candidate/confirmed）。
   2. **共振判定**：`cross_level.resonance=full` 表示各级别当前笔同向；`partial` 需指出哪一级别相反；
      `none` 或 `unknown` 时不做方向性结论。
   3. **区间套**：大级别出现买卖点或背驰后，到次级别找同方向的买卖点来精确定位，

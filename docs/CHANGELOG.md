@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [改进] 缠论提示词与结构快照升级：快照升级为 `chan_snapshot/1.1`，笔/背驰/买卖点用 `state`（`forming` 未完成笔、`candidate` 位于最新完成笔仍可能被重画、`confirmed` 其后已有新笔、`invalidated` 已击穿失效价）取代原 `confirmed` 布尔值，并新增 `as_of` 与 `level_roles`（方向/操作/确认级别）；超出提示词预算时先裁剪笔、最后才移除已失效买卖点。默认技能基线、默认/单 Agent/多 Agent 提示词改为“证据只来自快照、背驰只是预警、决策闸门、先写失效价、辅助数据只作背景、禁止编造概率与固定百分比止损”。分析结果新增代码层缠论闸门：买入结论在操作/确认级别缺少仍有效的 confirmed/candidate 买点时降级为观望，仅有 candidate 时置信度上限为中，结果写入 `dashboard.chan_gate`。单 Agent 与多 Agent 注入的快照说明改为跟随报告语言。**兼容性**：读取快照 `confirmed` 字段的自定义策略需改用 `state`。
 - [改进] 移除 MiniMax 搜索 provider（`MINIMAX_API_KEYS`，需 MiniMax Coding Plan 订阅）；MiniMax 大模型渠道（`LLM_MINIMAX_*`）不受影响。**兼容性**：已配置 `MINIMAX_API_KEYS` 的部署将不再使用该 Key。
 - [改进] 移除仅支持中国大陆手机号注册的搜索服务：删除 Bocha（`BOCHA_API_KEYS`）与 Anspire 搜索 provider；`ANSPIRE_API_KEYS` 保留并继续用于 Anspire 模型网关。保留可全球使用的 Tavily、Brave、SerpAPI、SearXNG，关键词搜索顺序为 Tavily → Brave → SerpAPI → SearXNG。**兼容性**：已配置 `BOCHA_API_KEYS` 的部署将不再使用该 Key。
 - [新功能] 新增按股票代码查询的新闻源 `NEWS_TICKER_PROVIDERS`（默认 `yahoo,finnhub`）：Yahoo Finance 免 Key，Finnhub 复用 `FINNHUB_API_KEY`（免费版仅北美公司）；个股新闻与多维情报的“最新消息”优先走这些源，结果仍经过原有的时效过滤、相关度排序与准入规则，无结果时回退到已配置的关键词搜索引擎。未配置任何搜索 Key 时也能获得美股/港股新闻。FMP 新闻接口需付费套餐，暂未接入。

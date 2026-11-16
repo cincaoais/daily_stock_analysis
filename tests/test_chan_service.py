@@ -124,6 +124,23 @@ def test_prompt_json_sheds_detail_to_fit_budget(monkeypatch):
     assert all(level["trend_type"] == "up" for level in payload["levels"].values())
 
 
+def test_prompt_json_sheds_in_order_and_keeps_live_points_last(monkeypatch):
+    stroke = {"id": "D.bi.x", "note": "x" * 100}
+    old = dict(_point("2026-01-01", False), note="y" * 300)
+    live = _point("2026-04-01", True)
+    snapshot = {"levels": {"D": {"recent_bis": [stroke] * 5, "buy_sell_points": [old, live]}}}
+
+    full = len(json.dumps(compact_chan_snapshot(snapshot), ensure_ascii=False, separators=(",", ":")))
+    monkeypatch.setattr(service, "_PROMPT_MAX_CHARS", full - 100)  # trimming strokes to 3 is enough
+    level = json.loads(chan_snapshot_json(snapshot))["levels"]["D"]
+    assert len(level["recent_bis"]) == 3 and len(level["buy_sell_points"]) == 2
+
+    monkeypatch.setattr(service, "_PROMPT_MAX_CHARS", 200)  # everything optional goes
+    level = json.loads(chan_snapshot_json(snapshot))["levels"]["D"]
+    assert "recent_bis" not in level
+    assert [p["dt"] for p in level["buy_sell_points"]] == ["2026-04-01"]
+
+
 def test_prompt_section_language_and_valid_json():
     pytest.importorskip("czsc")
     snapshot = load_chan_snapshot(_FakeManager(), "AAPL", timeframes="1d")
@@ -134,4 +151,6 @@ def test_prompt_section_language_and_valid_json():
     assert "Chan Structure Snapshot" in en and "invalidation_price" in en
     assert format_chan_prompt_section(snapshot, "ko").startswith(en[:40])
     body = en.split("```json\n", 1)[1].rsplit("\n```", 1)[0]
-    assert json.loads(body)["schema_version"] == "chan_snapshot/1.0"
+    assert json.loads(body)["schema_version"] == "chan_snapshot/1.1"
+    for word in ("level_roles", "candidate", "range_divergence"):
+        assert word in en, word

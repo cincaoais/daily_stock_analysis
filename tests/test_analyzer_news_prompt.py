@@ -116,7 +116,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         prompt = analyzer._get_analysis_system_prompt("zh", stock_code="600519")
 
         self.assertIn("专注于缠论结构分析", prompt)
-        self.assertIn("结构先行（只用快照）", prompt)
+        self.assertIn("证据：只用缠论结构快照", prompt)
         self.assertIn("操作级别（日线）有已确认且仍有效的买点", prompt)
 
     def test_analysis_prompt_requires_phase_decision_in_main_and_legacy_modes(self) -> None:

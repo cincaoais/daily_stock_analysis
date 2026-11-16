@@ -446,7 +446,7 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             instructions="chan_theory instructions",
         )
 
-        self.assertIn("结构先行", kwargs["default_skill_policy"])
+        self.assertIn("证据：只用缠论结构快照", kwargs["default_skill_policy"])
         self.assertTrue(kwargs["use_legacy_default_prompt"])
         skill_manager.activate.assert_called_once_with(["chan_theory"])
 
@@ -467,7 +467,7 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             instructions="chan_theory instructions",
         )
 
-        self.assertIn("结构先行", kwargs["default_skill_policy"])
+        self.assertIn("证据：只用缠论结构快照", kwargs["default_skill_policy"])
         self.assertTrue(kwargs["use_legacy_default_prompt"])
         skill_manager.activate.assert_called_once_with(["chan_theory"])
 
@@ -509,7 +509,7 @@ class TestAgentFactorySkillBaseline(unittest.TestCase):
             instructions="chan_theory instructions",
         )
 
-        self.assertIn("结构先行", kwargs["default_skill_policy"])
+        self.assertIn("证据：只用缠论结构快照", kwargs["default_skill_policy"])
         self.assertTrue(kwargs["use_legacy_default_prompt"])
         skill_manager.activate.assert_called_once_with(["chan_theory"])
 

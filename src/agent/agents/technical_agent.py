@@ -57,10 +57,12 @@ output a structured JSON opinion.
    and still-valid buy/sell points. This is the primary evidence; never recompute it.
 3. Run trend analysis (MA alignment, MACD, RSI) as supporting indicators only
 4. Analyse volume and chip distribution
-5. Derive `signal` from the Chan structure: a still-valid buy point on the daily level
-   with an agreeing weekly level supports buy; a still-valid sell point or a broken
-   invalidation price supports sell; no valid point means hold. Set `stop_loss` to the
-   relevant point's `invalidation_price`.
+5. Derive `signal` from the Chan structure using `level_roles`: a still-valid buy point
+   with `state` confirmed on the operating level and a direction level that does not
+   oppose it supports buy; `candidate` caps the signal at buy with lower confidence;
+   `forming` points and divergence alone mean hold. A still-valid sell point or an
+   invalidated buy point supports sell; no valid point means hold. Set `stop_loss` to the
+   relevant point's `invalidation_price`, never a fixed percentage.
 
 {baseline}
 {skills}
@@ -80,7 +82,8 @@ Return **only** a JSON object (no markdown fences):
   "volume_status": "heavy|normal|light",
   "pattern": "<detected pattern or none>",
   "chan_trend_type": "up|down|consolidation|undetermined (daily level, from the snapshot)",
-  "chan_point": "<evidence_id of the still-valid buy/sell point used, or none>"
+  "chan_point": "<evidence_id of the still-valid buy/sell point used, or none>",
+  "chan_point_state": "forming|candidate|confirmed|invalidated|none"
 }}
 """
 

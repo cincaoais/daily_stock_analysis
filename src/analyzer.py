@@ -1233,6 +1233,126 @@ def stabilize_decision_with_structure(
         logger.warning("[decision_stability] skipped: %s", exc)
 
 
+_CHAN_ACTIONABLE_STATES = ("confirmed", "candidate")
+
+
+def _chan_supporting_buy_points(
+    chan_snapshot: Dict[str, Any], current_price: Optional[float]
+) -> List[Dict[str, Any]]:
+    """Still-valid confirmed/candidate buy points on the operating or confirmation level."""
+    levels = chan_snapshot.get("levels") if isinstance(chan_snapshot.get("levels"), dict) else {}
+    roles = chan_snapshot.get("level_roles") if isinstance(chan_snapshot.get("level_roles"), dict) else {}
+    wanted = [roles.get("operating"), roles.get("confirmation")]
+    keys = [k for k in wanted if k] or ["D"]
+    found: List[Dict[str, Any]] = []
+    for key in keys:
+        level = levels.get(key)
+        if not isinstance(level, dict):
+            continue
+        for point in level.get("buy_sell_points") or []:
+            if not isinstance(point, dict) or point.get("side") != "buy" or not point.get("still_valid"):
+                continue
+            if point.get("state") not in _CHAN_ACTIONABLE_STATES:
+                continue
+            invalidation = _coerce_numeric_value(point.get("invalidation_price"))
+            if current_price is not None and invalidation is not None and current_price < invalidation:
+                continue
+            found.append(point)
+    return found
+
+
+def enforce_chan_buy_gate(
+    result: "AnalysisResult",
+    chan_snapshot: Optional[Dict[str, Any]],
+) -> None:
+    """Downgrade buy/add calls the Chan snapshot does not support.
+
+    A buy needs a still-valid buy point in state confirmed or candidate on the operating
+    or confirmation level, with price above its invalidation price. When only candidate
+    points support it, confidence is capped at medium. Does nothing without a snapshot
+    (Chan analysis disabled) or when the operating level is unusable, because the
+    prompt already tells the model to lower confidence in that case.
+    """
+    if not result or not isinstance(chan_snapshot, dict) or not chan_snapshot.get("levels"):
+        return
+    try:
+        roles = chan_snapshot.get("level_roles") if isinstance(chan_snapshot.get("level_roles"), dict) else {}
+        if roles and not roles.get("operating"):
+            return
+        decision_type = infer_decision_type_from_advice(
+            getattr(result, "decision_type", ""),
+            default=getattr(result, "decision_type", "hold") or "hold",
+        )
+        advice_type = infer_decision_type_from_advice(getattr(result, "operation_advice", ""), default="")
+        if decision_type != "buy" and advice_type != "buy":
+            return
+
+        language = normalize_report_language(getattr(result, "report_language", "zh"))
+        current_price = _first_numeric_value(getattr(result, "current_price", None))
+        points = _chan_supporting_buy_points(chan_snapshot, current_price)
+        dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+        result.dashboard = dashboard
+        point_ids = [str(p.get("evidence_id")) for p in points]
+
+        if not points:
+            reason = _localized_text(
+                language,
+                zh="缠论快照中操作级别没有已确认/候选且仍有效的买点，买入结论缺少结构依据，按观察处理。",
+                en="The Chan snapshot has no still-valid confirmed or candidate buy point on the operating "
+                   "level, so the buy call lacks structural support and is treated as watch-only.",
+                ko="찬 구조 스냅샷의 운용 레벨에 유효한 확정/후보 매수 포인트가 없어 매수 결론을 관찰로 처리합니다.",
+            )
+            no_position = _localized_text(
+                language,
+                zh="空仓先不买入，等待操作级别出现二买/三买并确认后再行动。",
+                en="Do not buy yet; wait for a 2B/3B on the operating level to appear and confirm.",
+                ko="아직 매수하지 말고 운용 레벨의 2B/3B 출현과 확인을 기다리세요.",
+            )
+            has_position = _localized_text(
+                language,
+                zh="持仓以所依赖买点的失效价为风控线，击穿即减仓。",
+                en="Holders use the invalidation price of the point they rely on as the risk line and reduce on a break.",
+                ko="보유자는 의존하는 매수 포인트의 무효화 가격을 리스크 기준으로 삼고 이탈 시 비중을 줄이세요.",
+            )
+            result.decision_type = "hold"
+            _bound_hold_watch_sentiment_score(result, reason=reason, final_action="watch")
+            _apply_hold_watch_dashboard(
+                result,
+                language,
+                advice=_localized_text(language, zh="观望", en="Watch", ko="관망"),
+                reason=reason,
+                current_price=current_price,
+                support=None,
+                resistance=None,
+                flow_bias="not_used",
+                no_position=no_position,
+                has_position=has_position,
+            )
+            dashboard["chan_gate"] = {"applied": True, "outcome": "downgraded_to_watch", "supporting_points": []}
+            _sync_stability_dashboard_fields(result)
+            logger.info("[chan_gate] Downgraded buy without a supporting Chan buy point")
+            return
+
+        if all(p.get("state") == "candidate" for p in points):
+            if localize_confidence_level(getattr(result, "confidence_level", ""), "en") == "High":
+                result.confidence_level = localize_confidence_level("medium", language)
+            note = _localized_text(
+                language,
+                zh="依据的买点仍是候选状态（最新一笔可能被重画），待确认前只宜小仓试探。",
+                en="The supporting buy point is still a candidate (the newest stroke can be redrawn); "
+                   "only a small trial position fits until it is confirmed.",
+                ko="근거 매수 포인트가 아직 후보 상태(최신 획이 다시 그려질 수 있음)이므로 확인 전에는 소량 시험 매수만 적합합니다.",
+            )
+            if note not in str(result.risk_warning or ""):
+                sep = "；" if language == "zh" else "; "
+                result.risk_warning = f"{result.risk_warning}{sep}{note}" if result.risk_warning else note
+            dashboard["chan_gate"] = {"applied": True, "outcome": "candidate_only", "supporting_points": point_ids}
+            return
+        dashboard["chan_gate"] = {"applied": False, "outcome": "supported", "supporting_points": point_ids}
+    except Exception as exc:  # noqa: BLE001 - a guard failure must not drop the report
+        logger.warning("[chan_gate] skipped: %s", exc)
+
+
 def _has_structural_risk_alert(result: "AnalysisResult") -> bool:
     dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
 
@@ -2140,10 +2260,10 @@ class GeminiAnalyzer:
 ## 可操作性与稳定性约束
 
 - 不得仅因为单日涨跌或评分跨线就在“买入/卖出”之间剧烈切换。
-- 操作建议必须同时参考价格位置（支撑/压力位）、量能/筹码、主力资金流向和风险事件。
-- 股价位于支撑与压力之间、资金流不明确时，优先输出“持有/震荡/观望/洗盘观察”等可执行的中性建议；`decision_type` 仍保持 `hold`。
-- 只有在接近支撑确认或有效突破压力，且资金流/量价配合时，才能给出买入；接近压力且资金流出时不得追买。
-- 只有在跌破关键支撑、主力资金持续流出或风险显著放大时，才能给出卖出/减仓。
+- 操作建议由缠论结构决定：买卖点的 `state`/`still_valid`、级别分工和失效价决定动作；价格位置（支撑/压力位）、量能/筹码、资金流向和风险事件只作背景，可否决或降级，不能单独产生买卖。
+- 操作级别没有 confirmed/candidate 且仍有效的买卖点，或价格在中枢内部、方向不明时，优先输出“持有/震荡/观望/洗盘观察”等可执行的中性建议；`decision_type` 仍保持 `hold`。
+- 只有方向级别不相反、存在 confirmed/candidate 且仍有效的买点、现价在其失效价之上、且无重大利空时，才能给出买入/加仓；单独的背驰或 forming 状态不得给出买入，接近压力且资金流出时不得追买。
+- 只有出现仍有效的卖点、持仓依赖的买点已被击穿失效价（invalidated）或风险显著放大时，才能给出卖出/减仓。
 - 必须输出 `dashboard.phase_decision` 七字段；盘中/午休/临近收盘要给出当前动作、观察条件和下一次检查点。
 - 建议输出可选展示字段 `dashboard.signal_attribution` 六字段；解释推荐理由的构成，包括技术指标、新闻舆情、基本面、市场环境的贡献度，以及最强看多/看空信号。
 - 盘前、非交易日或未知阶段不得伪造今日盘中走势；quote/daily_bars/technical 存在 stale、fallback、missing、fetch_failed、partial 或 estimated 时，`confidence_level` 不得为高。"""
@@ -2236,7 +2356,7 @@ class GeminiAnalyzer:
             "action_checklist": [
                 "✅/⚠️/❌ 检查项1：当前结构是否满足激活技能条件",
                 "✅/⚠️/❌ 检查项2：入场位置与风险回报是否合理",
-                "✅/⚠️/❌ 检查项3：量价/波动/筹码是否支持判断",
+                "✅/⚠️/❌ 检查项3：买卖点状态与背驰（forming/candidate/confirmed）是否支持判断",
                 "✅/⚠️/❌ 检查项4：无重大利空",
                 "✅/⚠️/❌ 检查项5：仓位与止损计划明确",
                 "✅/⚠️/❌ 检查项6：估值/业绩/催化与结论匹配"
@@ -2326,10 +2446,10 @@ class GeminiAnalyzer:
 ## 可操作性与稳定性约束
 
 - 不得仅因为单日涨跌或评分跨线就在“买入/卖出”之间剧烈切换。
-- 操作建议必须同时参考价格位置（支撑/压力位）、量能/筹码、主力资金流向和风险事件。
-- 股价位于支撑与压力之间、资金流不明确时，优先输出“持有/震荡/观望/洗盘观察”等可执行的中性建议；`decision_type` 仍保持 `hold`。
-- 只有在接近支撑确认或有效突破压力，且资金流/量价配合时，才能给出买入；接近压力且资金流出时不得追买。
-- 只有在跌破关键支撑、主力资金持续流出或风险显著放大时，才能给出卖出/减仓。
+- 操作建议由缠论结构决定：买卖点的 `state`/`still_valid`、级别分工和失效价决定动作；价格位置（支撑/压力位）、量能/筹码、资金流向和风险事件只作背景，可否决或降级，不能单独产生买卖。
+- 操作级别没有 confirmed/candidate 且仍有效的买卖点，或价格在中枢内部、方向不明时，优先输出“持有/震荡/观望/洗盘观察”等可执行的中性建议；`decision_type` 仍保持 `hold`。
+- 只有方向级别不相反、存在 confirmed/candidate 且仍有效的买点、现价在其失效价之上、且无重大利空时，才能给出买入/加仓；单独的背驰或 forming 状态不得给出买入，接近压力且资金流出时不得追买。
+- 只有出现仍有效的卖点、持仓依赖的买点已被击穿失效价（invalidated）或风险显著放大时，才能给出卖出/减仓。
 - 必须输出 `dashboard.phase_decision` 七字段；盘中/午休/临近收盘要给出当前动作、观察条件和下一次检查点。
 - 建议输出可选展示字段 `dashboard.signal_attribution` 六字段；解释推荐理由的构成，包括技术指标、新闻舆情、基本面、市场环境的贡献度，以及最强看多/看空信号。
 - 盘前、非交易日或未知阶段不得伪造今日盘中走势；quote/daily_bars/technical 存在 stale、fallback、missing、fetch_failed、partial 或 estimated 时，`confidence_level` 不得为高。"""
@@ -2462,10 +2582,10 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 ## Actionability and Stability Constraints
 
 - Do not flip between "Buy" and "Sell" just because of a single day's move or because the score crossed a threshold.
-- Operation advice must consider price position (support/resistance), volume/chips, main capital flow and risk events together.
-- When the price is between support and resistance and capital flow is unclear, prefer actionable neutral advice such as "Hold/Sideways/Watch/Shakeout watch"; `decision_type` stays `hold`.
-- Only give Buy near a confirmed support or after a valid breakout above resistance, with capital flow/volume confirming; never chase near resistance while capital flows out.
-- Only give Sell/Reduce after a break below key support, persistent main capital outflow, or a clear increase in risk.
+- Chan structure decides the action: the points' `state`/`still_valid`, the level roles and the invalidation price. Price position (support/resistance), volume/chips, capital flow and risk events are context: they may veto or downgrade, never create a buy or sell on their own.
+- When the operating level has no confirmed/candidate point that is still valid, or price sits inside the pivot with no clear direction, prefer actionable neutral advice such as "Hold/Sideways/Watch/Shakeout watch"; `decision_type` stays `hold`.
+- Only give Buy/Add when the direction level does not oppose it, a confirmed/candidate buy point is still valid, price is above its invalidation price, and no material negative overrides it; divergence alone or a `forming` state never justifies Buy, and never chase near resistance while capital flows out.
+- Only give Sell/Reduce on a still-valid sell point, when the buy point a holder relies on has been invalidated, or when risk clearly increases.
 - `dashboard.phase_decision` must contain all seven fields; intraday, lunch break and near the close must give the current action, watch conditions and the next checkpoint.
 - The optional display field `dashboard.signal_attribution` (six fields) is recommended; explain what drives the recommendation, including the contribution of technical indicators, news sentiment, fundamentals and market conditions, and the strongest bullish/bearish signals.
 - Pre-market, on non-trading days or in an unknown phase, never fabricate today's intraday move; when quote/daily_bars/technical is stale, fallback, missing, fetch_failed, partial or estimated, `confidence_level` must not be High."""
@@ -2491,9 +2611,9 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             "action_checklist": [
                 "✅/⚠️/❌ Check 1: a still-valid buy/sell point exists on the operating level",
                 "✅/⚠️/❌ Check 2: the higher level agrees with the operating level",
-                "✅/⚠️/❌ Check 3: volume confirms",
+                "✅/⚠️/❌ Check 3: divergence state (no top divergence / bottom divergence confirmed)",
                 "✅/⚠️/❌ Check 4: no major negative news",
-                "✅/⚠️/❌ Check 5: healthy chip structure",
+                "✅/⚠️/❌ Check 5: stop-loss anchored to the point's invalidation price",
                 "✅/⚠️/❌ Check 6: reasonable PE valuation"
             ]
         },
@@ -2554,7 +2674,7 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
             "action_checklist": [
                 "✅/⚠️/❌ Check 1: current structure meets the active skill conditions",
                 "✅/⚠️/❌ Check 2: entry position and risk-reward are reasonable",
-                "✅/⚠️/❌ Check 3: volume/volatility/chips support the view",
+                "✅/⚠️/❌ Check 3: point state and divergence (forming/candidate/confirmed) support the view",
                 "✅/⚠️/❌ Check 4: no major negative news",
                 "✅/⚠️/❌ Check 5: clear position size and stop-loss plan",
                 "✅/⚠️/❌ Check 6: valuation/earnings/catalysts match the conclusion"

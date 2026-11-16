@@ -256,7 +256,8 @@ class BaseAgent(ABC):
                 # Rendered with its reading rules and its own size budget.
                 from src.chan.service import format_chan_prompt_section
 
-                parts.append(format_chan_prompt_section(value, "zh").strip())
+                language = normalize_report_language(ctx.meta.get("report_language", "zh"))
+                parts.append(format_chan_prompt_section(value, language).strip())
                 continue
             if value is not None:
                 try:

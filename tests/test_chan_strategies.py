@@ -64,6 +64,11 @@ def test_default_policies_are_chan_rules():
         assert not any(word in text for word in _LEGACY_WORDING)
         assert "invalidation_price" in text
     assert "缠论结构快照" in defaults.CORE_TRADING_SKILL_POLICY_ZH
+    for text in (defaults.CORE_TRADING_SKILL_POLICY_ZH, defaults.CORE_TRADING_SKILL_POLICY_EN):
+        for word in ("level_roles", "forming", "candidate", "invalidated", "range_divergence", "evidence_id"):
+            assert word in text, word
+    assert "Divergence is a warning, not an instruction" in defaults.CORE_TRADING_SKILL_POLICY_EN
+    assert "no probabilities" in defaults.CORE_TRADING_SKILL_POLICY_EN
     assert not _CJK.search(defaults.CORE_TRADING_SKILL_POLICY_EN)
     assert not _CJK.search(defaults.TECHNICAL_SKILL_RULES_EN)
     assert defaults.get_default_trading_skill_policy(explicit_skill_selection=True) == ""

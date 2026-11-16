@@ -16,6 +16,7 @@ from src.chan.engine import (
     classify_trend,
     detect_trade_points,
     stroke_divergence,
+    stroke_state,
 )
 
 
@@ -140,6 +141,23 @@ def test_unconfirmed_stroke_gives_unconfirmed_point():
     assert point.kind == "3B" and point.confirmed is False
 
 
+def test_stroke_state_marks_newest_finished_stroke_as_candidate():
+    finished = _strokes([(0, 90), (10, 96), (20, 91), (30, 110)])
+    assert [stroke_state(finished, i) for i in range(3)] == ["confirmed", "confirmed", "candidate"]
+    forming = _strokes([(0, 90), (10, 96), (20, 91), (30, 110)], confirmed_last=False)
+    assert [stroke_state(forming, i) for i in range(3)] == ["confirmed", "candidate", "forming"]
+
+
+def test_level_roles_pick_daily_as_operating_level():
+    ok = {"status": "available"}
+    assert engine._level_roles({"W": ok, "D": ok, "60M": ok, "30M": ok}) == {
+        "direction": "W", "operating": "D", "confirmation": "60M"}
+    assert engine._level_roles({"W": ok, "D": {"status": "error"}, "60M": ok}) == {
+        "direction": None, "operating": "W", "confirmation": "60M"}
+    assert engine._level_roles({"D": {"status": "missing"}}) == {
+        "direction": None, "operating": None, "confirmation": None}
+
+
 def test_classify_trend():
     low = _pivot(zg=96, zd=90, start_day=0, formed_day=10, end_day=20, last_stroke_index=None)
     high = _pivot(zg=120, zd=110, start_day=30, formed_day=40, end_day=50, last_stroke_index=None)
@@ -186,7 +204,13 @@ def test_level_snapshot_on_synthetic_uptrend():
     bis = level["recent_bis"]
     assert len(bis) >= 4
     assert all(a["direction"] != b["direction"] for a, b in zip(bis, bis[1:]))
-    assert all(b["confirmed"] for b in bis[:-1])
+    assert all(b["state"] in ("confirmed", "candidate") for b in bis[:-1])
+    assert [b["state"] for b in bis].count("candidate") == 1
+    assert level["last_confirmed_bi"]["state"] == "candidate"
+    for point in level["buy_sell_points"]:
+        assert point["state"] in {"forming", "candidate", "confirmed", "invalidated"}
+        assert (point["state"] == "invalidated") == (not point["still_valid"])
+        assert "confirmed" not in point
     for pivot in level["zhongshu"]:
         assert pivot["gg"] >= pivot["zg"] > pivot["zd"] >= pivot["dd"]
     for point in level["buy_sell_points"]:
@@ -212,8 +236,11 @@ def test_multi_level_snapshot_shape():
         {"1d": daily, "30m": intraday, "1w": daily.head(10), "5m": daily},
         "TEST", market="US", sources={"1d": "FakeFetcher"},
     )
-    assert snapshot["schema_version"] == "chan_snapshot/1.0"
+    assert snapshot["schema_version"] == "chan_snapshot/1.1"
     assert list(snapshot["levels"]) == ["W", "D", "30M"]  # coarse to fine; unknown key ignored
+    # W is missing, so D operates with no direction level and 30M confirms.
+    assert snapshot["level_roles"] == {"direction": None, "operating": "D", "confirmation": "30M"}
+    assert snapshot["as_of"] == max(lv["last_bar"] for lv in snapshot["levels"].values() if lv.get("last_bar"))
     assert snapshot["levels"]["D"]["source"] == "FakeFetcher"
     assert snapshot["levels"]["W"]["status"] == "missing"
     assert snapshot["data_quality"]["status"] == "partial"
