@@ -771,6 +771,10 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         # 按 region 使用不同的新闻搜索词
         search_queries = self.profile.news_queries
         review_language = self._get_review_language()
+        if review_language != "zh":
+            # A Chinese query (e.g. "美股 大盘") returns Chinese articles for a non-Chinese
+            # review and spends a search-provider call; keep it only if nothing else is left.
+            search_queries = [q for q in search_queries if not re.search(r"[一-鿿]", q)] or search_queries
         market_names = {
             "cn": "大盘" if review_language == "zh" else "A-share market",
             "us": "美股市场" if review_language == "zh" else "US market",

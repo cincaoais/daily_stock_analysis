@@ -763,14 +763,16 @@ python main.py --workers 5            # 指定并发数
 2. 一次 yfinance 批量请求下载一年复权日线（实测约 12 秒），不经过 OpenD，不消耗 moomoo 历史 K 线额度。
 3. 每只股票只算日线缠论快照。入选条件：最近 `--scan-max-age`（默认 5）根日线内出现、仍未失效、状态为 `confirmed` 或 `candidate` 的日线买点。`forming` 买点只记入 JSON，因为买入闸门不会据此给出买入。
 4. 排序：`confirmed` 优先，其次越新越靠前，再按最新收盘到失效价的距离从小到大；最多 `--scan-max`（默认 20）只送入 LLM。
-5. 扫描报告写入 `reports/chan_scan_YYYYMMDD.md`；`reports/chan_scan_YYYYMMDD.json` 记录全部近期有效买卖点（含卖点），便于日后统计命中率。
+5. 扫描报告写入 `reports/chan_scan_YYYYMMDD.md`；`reports/chan_scan_YYYYMMDD.json` 记录全部近期有效买卖点（含卖点）。
+6. 每次扫描都会用刚下载的日线回看此前所有扫描记录（“历史扫描结果回看”一节）：每个买卖点只按首次出现的扫描计一次，入场价为该次扫描数据日的收盘价，统计其后 5/10/20 根日线的收益、相对同期 SPY 的超额与触发失效价比例，按“已送 LLM / 超出上限 / 笔未完成 / 卖点”分组；有效样本少于 30 时不足以下结论。
 
 ```bash
 python main.py --scan sp500,nasdaq100 --scan-only        # 只出扫描报告，不调用 LLM
 python main.py --scan sp500 --scan-max 10 --no-notify    # 最多分析 10 只
+python main.py --scan sp500,nasdaq100 --schedule --no-notify  # 按 SCHEDULE_TIME 每日定时扫描并分析
 ```
 
-说明：`--scan` 覆盖 `--stocks`/`STOCK_LIST`，不能与 `--portfolio` 同用，目前只支持一次性运行（不接入 `--schedule`）。仓库的 10 只股票事件研究（`evals/chan_event_study`）中，日线买点平均没有超额收益；扫描只是缩小 LLM 分析范围，不是买入信号。
+说明：`--scan` 覆盖 `--stocks`/`STOCK_LIST`，不能与 `--portfolio` 同用。只有显式加 `--schedule` 才会定时运行（`SCHEDULE_ENABLED=true` 不会把一次性 `--scan` 变成常驻进程）；定时运行在美股非交易日（按美东日期）跳过，`--force-run` 可强制执行。美股收盘为北京时间/马来西亚时间次日约 04:00–05:00，`SCHEDULE_TIME` 设在此后即可拿到完整日线。仓库的 10 只股票事件研究（`evals/chan_event_study`）中，日线买点平均没有超额收益；扫描只是缩小 LLM 分析范围，不是买入信号。
 
 ### 指数一次性分析（Phase 1）
 

@@ -155,3 +155,34 @@ def test_main_scan_mode_runs_analysis_only_on_selected_codes(monkeypatch):
 
     monkeypatch.setattr(scan, "run_chan_scan", lambda *a, **k: (_ for _ in ()).throw(ValueError("bad")))
     assert main._run_chan_scan_mode(config, _args()) == 1
+
+
+def test_scheduled_scan_skips_closed_us_market_and_raises_on_failure(monkeypatch):
+    import main
+    import src.core.trading_calendar as cal
+
+    calls = []
+    monkeypatch.setattr(main, "_reload_runtime_config", lambda: argparse.Namespace(trading_day_check_enabled=True))
+    monkeypatch.setattr(main, "_run_chan_scan_mode", lambda config, args: calls.append(args.scan) or 0)
+
+    monkeypatch.setattr(cal, "get_open_markets_today", lambda: {"cn"})
+    main._scheduled_chan_scan_once(_args(force_run=False))
+    assert calls == []
+    main._scheduled_chan_scan_once(_args(force_run=True))
+    assert calls == ["sp500"]
+
+    monkeypatch.setattr(cal, "get_open_markets_today", lambda: {"us"})
+    monkeypatch.setattr(main, "_run_chan_scan_mode", lambda config, args: 1)
+    with pytest.raises(RuntimeError):
+        main._scheduled_chan_scan_once(_args(force_run=False))
+
+
+def test_scan_schedule_hands_the_scan_task_to_the_scheduler(monkeypatch):
+    import main
+    import src.scheduler as scheduler
+
+    seen = {}
+    monkeypatch.setattr(scheduler, "run_with_schedule", lambda **kwargs: seen.update(kwargs))
+    config = argparse.Namespace(schedule_run_immediately=True, schedule_time="06:30")
+    assert main._run_chan_scan_schedule(config, _args(no_run_immediately=True)) == 0
+    assert seen["schedule_time"] == "06:30" and seen["run_immediately"] is False and callable(seen["task"])

@@ -1504,6 +1504,41 @@ def _run_chan_scan_mode(config: Config, args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _scheduled_chan_scan_once(args: argparse.Namespace) -> None:
+    """One scheduled ``--scan`` run: skipped when the US market is closed today
+    (US local date) unless ``--force-run``; raises when the scan or analysis fails."""
+    runtime_config = _reload_runtime_config()
+    if not getattr(args, "force_run", False) and getattr(runtime_config, "trading_day_check_enabled", True):
+        from src.core.trading_calendar import get_open_markets_today
+
+        if "us" not in get_open_markets_today():
+            logger.info("美股今日非交易日，跳过定时缠论扫描（可用 --force-run 强制执行）")
+            return
+    exit_code = _run_chan_scan_mode(runtime_config, args)
+    if exit_code != 0:
+        raise RuntimeError(f"scheduled chan scan failed with exit code {exit_code}")
+
+
+def _run_chan_scan_schedule(config: Config, args: argparse.Namespace) -> int:
+    """``--scan ... --schedule``: run the scan (and the analysis of its picks) at SCHEDULE_TIME(S)."""
+    from src.scheduler import run_with_schedule
+
+    run_immediately = config.schedule_run_immediately and not getattr(args, "no_run_immediately", False)
+    logger.info("模式: 定时缠论扫描 (%s)，每日执行时间: %s，启动时立即执行: %s",
+                args.scan, config.schedule_time, run_immediately)
+    schedule_kwargs: Dict[str, Any] = {
+        "task": lambda: _scheduled_chan_scan_once(args),
+        "schedule_time": config.schedule_time,
+        "run_immediately": run_immediately,
+        "schedule_time_provider": _build_schedule_time_provider(config.schedule_time),
+    }
+    if hasattr(config, "schedule_times"):
+        schedule_kwargs["schedule_times"] = config.schedule_times
+        schedule_kwargs["schedule_times_provider"] = _build_schedule_times_provider(config.schedule_time)
+    run_with_schedule(**schedule_kwargs)
+    return 0
+
+
 def start_api_server(host: str, port: int, config: Config) -> None:
     """
     在后台线程启动 FastAPI 服务
@@ -2014,7 +2049,10 @@ def main() -> int:
             return 0 if market_review_result else 1
 
         # 模式1.5: 缠论指数成分扫描（无 LLM 预筛，只分析入选股票）
+        # 仅显式 --schedule 时进入定时扫描；SCHEDULE_ENABLED 不会把一次性 --scan 变成常驻进程。
         if getattr(args, 'scan', None):
+            if args.schedule:
+                return _run_chan_scan_schedule(config, args)
             return _run_chan_scan_mode(config, args)
 
         # 模式2: 定时任务模式

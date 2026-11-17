@@ -142,3 +142,25 @@ def test_a_read_timeout_after_the_budget_counts_as_deadline():
         )
     assert text == '{"ok": true}'
     assert calls == [("primary-route", True), ("fallback-route", True)]
+
+
+def test_text_fallback_names_the_model_that_produced_the_text():
+    from src.analyzer import _AllModelsFailedError
+
+    analyzer = _analyzer()
+
+    def dispatch(model, kwargs, **_):
+        if model == "primary-route":
+            return _response("not json at all")
+        raise RuntimeError("fallback provider down")
+
+    def reject(text):
+        raise ValueError("invalid json")
+
+    with patch.object(analyzer, "_dispatch_litellm_completion", side_effect=dispatch):
+        with pytest.raises(_AllModelsFailedError) as info:
+            analyzer._call_litellm_impl("prompt json", {"max_output_tokens": 64}, system_prompt="system",
+                                        response_validator=reject)
+    assert info.value.last_response_text == "not json at all"
+    assert info.value.last_response_model == "primary-route"
+    assert info.value.last_model == "fallback-route"

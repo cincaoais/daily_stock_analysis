@@ -99,3 +99,24 @@ def test_technical_agent_prompt_puts_chan_structure_first():
     assert "get_chan_structure" in prompt
     assert "invalidation_price" in prompt
     assert "get_chan_structure" in TechnicalAgent.tool_names
+
+
+TREND = {
+    "trend_status": "空头排列", "ma_alignment": "空头排列 MA5<MA10<MA20", "trend_strength": 30,
+    "bias_ma5": -2.1, "bias_ma10": -3.4, "volume_status": "缩量", "volume_trend": "量能萎缩",
+    "buy_signal": "强烈卖出", "signal_score": 29, "signal_reasons": ["均线多头"], "risk_factors": ["跌破MA20"],
+}
+
+
+def test_ma_verdict_is_left_out_when_a_chan_snapshot_is_present():
+    prompt = _analyzer()._format_prompt(_context(chan_snapshot=SNAPSHOT, trend_analysis=dict(TREND)), "Apple", None)
+    assert "辅助指标" in prompt and "空头排列 MA5<MA10<MA20" in prompt and "-2.10%" in prompt
+    for legacy in ("系统信号", "系统评分", "强烈卖出", "趋势分析预判", "MA5>MA10>MA20为多头"):
+        assert legacy not in prompt
+
+
+def test_ma_section_unchanged_without_a_usable_chan_snapshot():
+    missing = {"levels": {"D": {"status": "missing"}}}
+    prompt = _analyzer()._format_prompt(_context(chan_snapshot=missing, trend_analysis=dict(TREND)), "Apple", None)
+    assert "辅助指标" not in prompt
+    assert "强烈卖出" in prompt

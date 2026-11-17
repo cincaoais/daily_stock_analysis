@@ -270,21 +270,33 @@ def render_scan_markdown(result: ScanResult, language: str = "zh") -> str:
     return "\n".join(lines) + "\n"
 
 
-def save_scan_outputs(result: ScanResult, report_dir: Path, language: str = "zh",
-                      now: Optional[datetime] = None) -> Dict[str, Path]:
-    """Write ``chan_scan_YYYYMMDD.md`` and a ``.json`` with every recent point (both sides),
-    so the hit rate of scan picks can be measured later."""
+def scan_output_paths(report_dir: Path, now: Optional[datetime] = None) -> Dict[str, Path]:
     stamp = (now or datetime.now()).strftime("%Y%m%d")
+    return {"markdown": report_dir / f"chan_scan_{stamp}.md", "json": report_dir / f"chan_scan_{stamp}.json"}
+
+
+def save_scan_outputs(result: ScanResult, report_dir: Path, language: str = "zh",
+                      now: Optional[datetime] = None, review: Optional[Dict[str, Any]] = None) -> Dict[str, Path]:
+    """Write ``chan_scan_YYYYMMDD.md`` and a ``.json`` with every recent point (both sides),
+    so the hit rate of scan picks can be measured later. ``review`` (scores of earlier
+    scans' points) is appended to both when given."""
+    from src.chan.scan_review import render_review_markdown
+
     report_dir.mkdir(parents=True, exist_ok=True)
-    md_path = report_dir / f"chan_scan_{stamp}.md"
-    json_path = report_dir / f"chan_scan_{stamp}.json"
-    md_path.write_text(render_scan_markdown(result, language), encoding="utf-8")
+    paths = scan_output_paths(report_dir, now)
+    md_path, json_path = paths["markdown"], paths["json"]
+    markdown = render_scan_markdown(result, language)
+    if review and review.get("events"):
+        markdown += render_review_markdown(review, language)
+    md_path.write_text(markdown, encoding="utf-8")
     payload = {
         "universes": result.universes, "as_of": result.as_of, "universe_size": result.universe_size,
         "scanned": result.scanned, "unusable": result.unusable, "max_bars_since": result.max_bars_since,
         "max_candidates": result.max_candidates, "selected": result.selected_codes,
         "candidates": result.candidates, "points": result.points,
     }
+    if review is not None:
+        payload["review"] = review
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
     return {"markdown": md_path, "json": json_path}
 
@@ -302,12 +314,21 @@ def run_chan_scan(
     universes = parse_scan_universes(universe_arg)
     tickers = load_universe(universes, cache_dir)
     logger.info("[chan-scan] %s: %d 只成分股，批量下载日线...", ",".join(universes), len(tickers))
-    frames = download_daily_frames(tickers)
+    from src.chan.scan_review import BENCHMARK, review_past_scans
+
+    frames = download_daily_frames(list(tickers) + ([BENCHMARK] if BENCHMARK not in tickers else []))
     missing = sorted(set(tickers) - set(frames))
-    result = scan_frames(frames, max_bars_since=max_bars_since, max_candidates=max_candidates,
+    scan_input = {code: frame for code, frame in frames.items() if code in set(tickers)}
+    result = scan_frames(scan_input, max_bars_since=max_bars_since, max_candidates=max_candidates,
                          universes=universes, universe_size=len(tickers))
     result.unusable = sorted(set(result.unusable) | set(missing))
-    paths = save_scan_outputs(result, report_dir, language)
+    try:
+        # Score earlier scans with the bars just downloaded; today's file is rewritten below.
+        review = review_past_scans(report_dir, frames, exclude=scan_output_paths(report_dir).values())
+    except Exception as exc:  # noqa: BLE001 - the review must never block the scan
+        logger.warning("[chan-scan] 历史扫描回看失败: %s", exc)
+        review = None
+    paths = save_scan_outputs(result, report_dir, language, review=review)
     logger.info(
         "[chan-scan] 扫描 %d 只，买点 %d 只，送入 LLM %d 只: %s；报告 %s",
         result.scanned, len(result.candidates), len(result.selected), result.selected_codes, paths["markdown"],

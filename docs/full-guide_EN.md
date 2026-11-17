@@ -704,14 +704,16 @@ python main.py --workers 5            # Specify concurrency
 2. One bulk yfinance request downloads a year of adjusted daily bars (about 12 seconds in testing). OpenD is not used, so the moomoo historical K-line quota is untouched.
 3. Each ticker gets a daily-only Chan snapshot. A ticker is picked when it has a still-valid daily buy point in state `confirmed` or `candidate` that formed within the last `--scan-max-age` bars (default 5). `forming` buy points are only logged in the JSON, because the buy gate never turns them into a buy.
 4. Ranking: `confirmed` first, then most recent, then the smallest distance from the last close to the invalidation price. At most `--scan-max` tickers (default 20) go to the LLM.
-5. The scan report is written to `reports/chan_scan_YYYYMMDD.md`. `reports/chan_scan_YYYYMMDD.json` records every recent valid point, sell points included, so the hit rate can be measured later.
+5. The scan report is written to `reports/chan_scan_YYYYMMDD.md`. `reports/chan_scan_YYYYMMDD.json` records every recent valid point, sell points included.
+6. Every scan also scores all earlier scan records with the bars it just downloaded (the "Past scan picks" section). Each point counts once, from the first scan that reported it; entry is the close on that scan's data date; the section shows the return after 5/10/20 daily bars, the excess over SPY on the same bars and how often the invalidation price was hit, grouped as sent to LLM / over the cap / forming stroke / sell points. Groups with fewer than 30 scored points are too small to judge.
 
 ```bash
 python main.py --scan sp500,nasdaq100 --scan-only        # Scan report only, no LLM call
 python main.py --scan sp500 --scan-max 10 --no-notify    # Analyze at most 10 picks
+python main.py --scan sp500,nasdaq100 --schedule --no-notify  # Scan and analyze daily at SCHEDULE_TIME
 ```
 
-Notes: `--scan` overrides `--stocks`/`STOCK_LIST`, cannot be combined with `--portfolio`, and runs once only (it is not wired into `--schedule`). In the repo's 10-symbol event study (`evals/chan_event_study`) daily buy points showed no excess return on average; the scan narrows what the LLM looks at and is not a buy signal by itself.
+Notes: `--scan` overrides `--stocks`/`STOCK_LIST` and cannot be combined with `--portfolio`. It runs on a schedule only with an explicit `--schedule` (`SCHEDULE_ENABLED=true` does not turn a one-off `--scan` into a long-running process); scheduled runs are skipped on US market holidays (by US Eastern date) unless `--force-run` is given. The US close is about 04:00–05:00 the next day in Beijing/Malaysia time, so set `SCHEDULE_TIME` after that to get the finished daily bar. In the repo's 10-symbol event study (`evals/chan_event_study`) daily buy points showed no excess return on average; the scan narrows what the LLM looks at and is not a buy signal by itself.
 
 ### One-shot index analysis (Phase 1)
 

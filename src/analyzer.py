@@ -346,10 +346,14 @@ class _AllModelsFailedError(Exception):
         last_model: Optional[str] = None,
         last_provider: Optional[str] = None,
         last_usage: Optional[Dict[str, Any]] = None,
+        last_response_model: Optional[str] = None,
     ):
         super().__init__(message)
         self.last_response_text = last_response_text
         self.last_model = last_model
+        # Model that produced ``last_response_text``; ``last_model`` may be a later model
+        # that failed outright, so the text fallback must not be labelled with it.
+        self.last_response_model = last_response_model
         self.last_provider = last_provider
         self.last_usage = last_usage or {}
 
@@ -839,6 +843,53 @@ def _infer_trend_direction(trend: Dict[str, Any]) -> str:
 def _filter_conflicting_trend_items(items: List[str], conflict_hints: Tuple[str, ...]) -> List[str]:
     """Drop reasons that directly conflict with the final trend direction."""
     return [item for item in items if not _contains_trend_hint(item, conflict_hints)]
+
+
+def _chan_snapshot_usable(snapshot: Any) -> bool:
+    """True when a Chan snapshot has at least one available/partial level."""
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("levels"), dict):
+        return False
+    return any(
+        isinstance(level, dict) and level.get("status") in ("available", "partial")
+        for level in snapshot["levels"].values()
+    )
+
+
+def _format_secondary_trend_section(trend: Dict[str, Any], *, english: bool, unknown_text: str) -> str:
+    """Moving-average facts only, for prompts that carry a Chan snapshot.
+
+    The legacy trend analyzer's own verdict (system signal, system score, buy reasons)
+    is a separate MA strategy; next to the Chan structure it reads as a second,
+    conflicting decision, so it is left out.
+    """
+    status = trend.get("trend_status", unknown_text)
+    alignment = trend.get("ma_alignment", unknown_text)
+    volume = f"{trend.get('volume_status', unknown_text)} {trend.get('volume_trend', '')}".strip()
+    bias5 = f"{trend.get('bias_ma5', 0):+.2f}%"
+    bias10 = f"{trend.get('bias_ma10', 0):+.2f}%"
+    if english:
+        return f"""
+### Secondary Indicators (moving averages and volume; context only)
+> These do not decide the action: the Chan structure snapshot and its buy/sell points do.
+| Indicator | Value |
+|------|------|
+| MA trend state | {status} |
+| MA alignment | {alignment} |
+| Distance from MA5 | {bias5} |
+| Distance from MA10 | {bias10} |
+| Volume | {volume} |
+"""
+    return f"""
+### 辅助指标（均线与量能，仅作背景）
+> 这些指标不决定操作结论，操作结论以缠论结构快照及其买卖点为准。
+| 指标 | 数值 |
+|------|------|
+| 均线趋势状态 | {status} |
+| 均线排列 | {alignment} |
+| 距 MA5 | {bias5} |
+| 距 MA10 | {bias10} |
+| 量能 | {volume} |
+"""
 
 
 def _sanitize_trend_analysis_for_prompt(
@@ -3884,6 +3935,7 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
 
         last_error = None
         last_response_text: Optional[str] = None
+        last_response_model: Optional[str] = None
         last_model: Optional[str] = None
         last_provider: Optional[str] = None
         last_usage: Dict[str, Any] = {}
@@ -4008,7 +4060,13 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                         time.monotonic() + float(stream_budget_sec) if stream_budget_sec else None
                     )
                     try:
-                        stream_response = _complete({**call_kwargs, "stream": True}, cache_recovery=False)
+                        # include_usage: OpenAI-compatible providers only send token usage at
+                        # the end of a stream when asked; without it usage was recorded as 0.
+                        # A provider that rejects it falls back to the non-stream call below.
+                        stream_response = _complete(
+                            {**call_kwargs, "stream": True, "stream_options": {"include_usage": True}},
+                            cache_recovery=False,
+                        )
                         _stream_text, _stream_usage = self._consume_litellm_stream(
                             stream_response,
                             model=model,
@@ -4045,6 +4103,7 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                 if _stream_text is not None:
                     actual_model = _stream_usage.get("response_model") or model
                     last_response_text = _stream_text
+                    last_response_model = actual_model
                     last_model = actual_model
                     if _stream_usage.get("provider"):
                         last_provider = _stream_usage["provider"]
@@ -4090,6 +4149,7 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                     if response_provider or usage_provider:
                         usage.setdefault("provider", response_provider or usage_provider)
                     last_response_text = content
+                    last_response_model = actual_model
                     last_model = actual_model
                     if response_provider:
                         last_provider = response_provider
@@ -4120,6 +4180,7 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
             f"All LLM models failed (tried {len(models_to_try)} model(s)). Last error: {last_error}",
             last_response_text=last_response_text,
             last_model=last_model,
+            last_response_model=last_response_model,
             last_provider=last_provider,
             last_usage=last_usage,
         )
@@ -4465,7 +4526,7 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                             code,
                         )
                         response_text = exc.last_response_text
-                        model_used = exc.last_model
+                        model_used = exc.last_response_model or exc.last_model
                         llm_usage = exc.last_usage
                     else:
                         raise
@@ -4975,7 +5036,18 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
 """
         
         # 添加趋势分析结果（仅隐式内建默认策略回退保留旧口径，作为辅助指标）
-        if 'trend_analysis' in context:
+        if 'trend_analysis' in context and _chan_snapshot_usable(context.get('chan_snapshot')):
+            # With a Chan snapshot the MA analyzer's own signal/score would be a second verdict.
+            prompt += _format_secondary_trend_section(
+                _sanitize_trend_analysis_for_prompt(
+                    context['trend_analysis'],
+                    volume_change_ratio=context.get('volume_change_ratio'),
+                    language=report_language,
+                ),
+                english=english,
+                unknown_text=unknown_text,
+            )
+        elif 'trend_analysis' in context:
             trend = _sanitize_trend_analysis_for_prompt(
                 context['trend_analysis'],
                 volume_change_ratio=context.get('volume_change_ratio'),
