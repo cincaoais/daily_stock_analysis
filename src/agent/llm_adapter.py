@@ -54,10 +54,10 @@ from src.llm.provider_cache import (
 
 logger = logging.getLogger(__name__)
 
-# LiteLLM's streaming success logging runs asyncio.run() per chunk on a 100-thread
-# pool. On Windows each new event loop builds a localhost socket pair, and those
-# threads were seen blocked in accept(), hanging interpreter exit after the run had
-# finished. The project registers no LiteLLM callbacks or cache, so nothing is lost.
+# 本项目不注册 LiteLLM success callback，用量从响应自身统计。LiteLLM 默认会为每个
+# streaming chunk 向全局线程池提交一次 asyncio.run() 日志任务；Windows 上每次都会新建
+# Proactor 事件循环和回环 socketpair，长报告产生数千次，既耗 CPU，又会让线程池卡在
+# socketpair 的 accept() 上，导致 CLI 打印「程序执行完成」后进程无法退出。
 litellm.disable_streaming_logging = True
 
 
