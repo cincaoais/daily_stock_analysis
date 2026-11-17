@@ -1051,6 +1051,9 @@ class Config:
     # LLM_ANALYSIS_MAX_OUTPUT_TOKENS: output cap of the stock analysis call. Reasoning models
     # count hidden reasoning against it, which can truncate the dashboard JSON at 8192.
     llm_analysis_max_output_tokens: int = 8192
+    # LLM_ANALYSIS_TIMEOUT_SEC: time budget per model for the stock analysis call; on
+    # expiry the call moves to the next configured model. 0 = no limit (LiteLLM default).
+    llm_analysis_timeout_sec: int = 180
 
     # Provider prompt-cache controls. These do not control provider implicit cache.
     llm_prompt_cache_telemetry_enabled: bool = True
@@ -1993,6 +1996,13 @@ class Config:
                 field_name="LLM_ANALYSIS_MAX_OUTPUT_TOKENS",
                 minimum=1024,
                 maximum=131072,
+            ),
+            llm_analysis_timeout_sec=parse_env_int(
+                os.getenv("LLM_ANALYSIS_TIMEOUT_SEC"),
+                180,
+                field_name="LLM_ANALYSIS_TIMEOUT_SEC",
+                minimum=0,
+                maximum=3600,
             ),
             litellm_config_path=litellm_config_path,
             llm_models_source=llm_models_source,

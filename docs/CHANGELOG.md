@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] 新增 `LLM_ANALYSIS_TIMEOUT_SEC`（默认 `180` 秒，`0` 不限制）：此前个股分析请求沿用 LiteLLM 默认的 6000 秒超时，服务商流式输出卡住时单只股票可等待 10 分钟以上并占住一个并发位。现在该值既是单次读取超时，也限制一次流式输出的总时长；超时后不再用同一模型做非流式重试，直接换下一个已配置模型。分析用 Router 对超时错误不再重试（`TimeoutErrorRetries=0`），其他错误仍重试 2 次。**兼容性**：输出超过 180 秒的慢模型需调大该值，否则会被判超时并换模型。
 - [新功能] 新增 `--scan sp500,nasdaq100`（及 `--scan-max`、`--scan-max-age`、`--scan-only`）：先不调用 LLM，用一次 yfinance 批量请求下载标普 500 / 纳斯达克 100 成分股（约 520 只）的一年复权日线并计算日线缠论快照，只把最近 N 根日线内出现、仍有效且状态为 confirmed/candidate 的日线买点股票（默认最多 20 只）送入正常个股分析；扫描报告写入 `reports/chan_scan_YYYYMMDD.md`，全部近期买卖点写入同名 `.json` 便于统计命中率。不经过 OpenD，不消耗 moomoo 历史 K 线额度。
 - [修复] Wikipedia 拒绝 Python 默认 User-Agent（HTTP 403），选股 US 股票池 `sp500` 来源此前总是静默回退到内置 50 只大盘股；现改为带标识的请求，并新增纳斯达克 100 成分股来源。
 - [修复] 关闭 LiteLLM 流式成功日志（`litellm.disable_streaming_logging`）：其按块在 100 线程池中新建 asyncio 事件循环，在 Windows 上这些线程会卡在本地 socketpair 的 `accept()`，导致分析完成后进程无法退出。项目未注册 LiteLLM 回调或缓存，用量记录不受影响。

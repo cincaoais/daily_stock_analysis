@@ -309,6 +309,20 @@ class _LiteLLMStreamError(RuntimeError):
         self.partial_received = partial_received
 
 
+class _LLMDeadlineExceeded(RuntimeError):
+    """A streamed call ran past its wall-clock budget; the caller moves to the next model
+    instead of retrying the same one without streaming."""
+
+
+def _close_quietly(obj: Any) -> None:
+    close = getattr(obj, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:  # noqa: BLE001 - best-effort release of the HTTP stream
+            pass
+
+
 class _AllModelsFailedError(Exception):
     """Raised when every model in the fallback chain fails.
 
@@ -1247,6 +1261,14 @@ def _analysis_max_output_tokens(config: Any) -> int:
     if isinstance(value, int) and not isinstance(value, bool) and value > 0:
         return value
     return 8192
+
+
+def _analysis_timeout_sec(config: Any) -> int:
+    """LLM_ANALYSIS_TIMEOUT_SEC when it is a real positive int; 0 (no limit) otherwise."""
+    value = getattr(config, "llm_analysis_timeout_sec", None)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return 0
 
 
 _CHAN_ACTIONABLE_STATES = ("confirmed", "candidate")
@@ -2995,6 +3017,9 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                     model_list=router_model_list,
                     routing_strategy="simple-shuffle",
                     num_retries=2,
+                    # A timed-out call goes straight to the next model (LLM_ANALYSIS_TIMEOUT_SEC);
+                    # retrying a stalled provider would multiply the wait.
+                    retry_policy={"TimeoutErrorRetries": 0},
                 )
             except TypeError:
                 logger.debug("Analyzer LLM: Router constructor signature not compatible; fallback to direct mode")
@@ -3040,6 +3065,9 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                     model_list=legacy_model_list,
                     routing_strategy="simple-shuffle",
                     num_retries=2,
+                    # A timed-out call goes straight to the next model (LLM_ANALYSIS_TIMEOUT_SEC);
+                    # retrying a stalled provider would multiply the wait.
+                    retry_policy={"TimeoutErrorRetries": 0},
                 )
             except TypeError:
                 logger.debug("Analyzer LLM: Legacy Router constructor signature not compatible; using legacy model_list fallback")
@@ -3601,8 +3629,13 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
         usage_model: Optional[str] = None,
         provider: Optional[str] = None,
         progress_callback: Optional[Callable[[int], None]] = None,
+        deadline: Optional[float] = None,
     ) -> Tuple[str, Dict[str, Any]]:
-        """Consume a LiteLLM stream into a single text payload."""
+        """Consume a LiteLLM stream into a single text payload.
+
+        ``deadline`` is a ``time.monotonic()`` value; past it the stream is closed and
+        ``_LLMDeadlineExceeded`` is raised (a provider can keep a stream open for minutes).
+        """
         chunks: List[str] = []
         usage: Dict[str, Any] = {}
         response_model = ""
@@ -3639,7 +3672,18 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                 if progress_callback and chars_received >= next_emit_at:
                     progress_callback(chars_received)
                     next_emit_at = chars_received + 160
+                if deadline is not None and time.monotonic() > deadline:
+                    raise _LLMDeadlineExceeded(
+                        f"{model} stream exceeded its time budget after {chars_received} chars"
+                    )
+        except _LLMDeadlineExceeded:
+            _close_quietly(stream_response)
+            raise
         except Exception as exc:
+            if deadline is not None and time.monotonic() > deadline:
+                # A read timeout on a stalled stream lands here once the budget is spent.
+                _close_quietly(stream_response)
+                raise _LLMDeadlineExceeded(f"{model} stream timed out: {exc}") from exc
             raise _LiteLLMStreamError(
                 f"{model} stream interrupted: {exc}",
                 partial_received=chars_received > 0,
@@ -3830,6 +3874,8 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
         )
         requested_temperature = generation_config.get('temperature', 0.7)
         requested_timeout = generation_config.get("timeout")
+        # Wall-clock budget for one streamed attempt per model (LLM_ANALYSIS_TIMEOUT_SEC).
+        stream_budget_sec = generation_config.get("stream_budget_sec")
 
         models_to_try = [config.litellm_model] + (config.litellm_fallback_models or [])
         models_to_try = [m for m in models_to_try if m]
@@ -3958,6 +4004,9 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                 _stream_usage: Dict[str, Any] = {}
 
                 if model_stream:
+                    stream_deadline = (
+                        time.monotonic() + float(stream_budget_sec) if stream_budget_sec else None
+                    )
                     try:
                         stream_response = _complete({**call_kwargs, "stream": True}, cache_recovery=False)
                         _stream_text, _stream_usage = self._consume_litellm_stream(
@@ -3966,7 +4015,10 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                             usage_model=usage_model,
                             provider=usage_provider,
                             progress_callback=stream_progress_callback,
+                            deadline=stream_deadline,
                         )
+                    except _LLMDeadlineExceeded:
+                        raise  # next model; a same-model non-stream retry would wait as long again
                     except _LiteLLMStreamError as exc:
                         safe_error = self._sanitize_litellm_exception_text(exc, config=config, model=model)
                         if exc.partial_received:
@@ -4374,6 +4426,12 @@ Score only from facts in the Chan structure snapshot; when the snapshot is missi
                 # dashboard JSON can be cut off; LLM_ANALYSIS_MAX_OUTPUT_TOKENS raises it.
                 "max_output_tokens": _analysis_max_output_tokens(config),
             }
+            analysis_timeout = _analysis_timeout_sec(config)
+            if analysis_timeout:
+                # LLM_ANALYSIS_TIMEOUT_SEC: per-read HTTP timeout plus a wall-clock budget for
+                # the streamed attempt, so a stalled provider fails over to the next model.
+                generation_config["timeout"] = analysis_timeout
+                generation_config["stream_budget_sec"] = analysis_timeout
             if getattr(config, "llm_json_mode", False):
                 # Ask OpenAI-compatible providers for bare JSON; the dashboard
                 # validator still checks the contract after the call.
