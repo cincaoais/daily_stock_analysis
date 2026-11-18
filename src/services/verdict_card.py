@@ -104,11 +104,68 @@ def _short_date(value: Any) -> str:
     return text
 
 
-def action_label(action: Any, decision_type: Any = None) -> Tuple[str, str]:
+def action_key(action: Any, decision_type: Any = None) -> str:
     key = str(action or "").strip().lower()
     if key not in _ACTION_LABELS:
         key = _DECISION_FALLBACK.get(str(decision_type or "").strip().lower(), "watch")
-    return _ACTION_LABELS[key]
+    return key
+
+
+def action_label(action: Any, decision_type: Any = None) -> Tuple[str, str]:
+    return _ACTION_LABELS[action_key(action, decision_type)]
+
+
+_ZONE = re.compile(r"(?<![\w.\-/])(\d{1,6}(?:\.\d+)?)\s*[-–~]\s*(\d{1,6}(?:\.\d+)?)(?![\w.\-/%])")
+_SIZE = re.compile(r"(?<![\w.])(\d{1,2}(?:\s*-\s*\d{1,2})?)\s*/\s*10\b")
+
+
+def price_zone(text: Any, reference: Optional[float], tolerance: float = 0.5) -> Optional[str]:
+    """``"148.80-150.33 (30M …)"`` -> ``"148.80–150.33"``; a single price near the reference otherwise."""
+    if not text or not reference:
+        return None
+    for match in _ZONE.finditer(str(text)):
+        low, high = _num(match.group(1)), _num(match.group(2))
+        if low and high and all(abs(v - reference) <= reference * tolerance for v in (low, high)):
+            low, high = min(low, high), max(low, high)
+            return _fmt_price(low) if low == high else f"{_fmt_price(low)}–{_fmt_price(high)}"
+    single = price_near(text, reference, tolerance)
+    return _fmt_price(single) if single is not None else None
+
+
+def position_size(text: Any) -> Optional[str]:
+    """``"Suggested position: 0-2/10 (watch …)"`` -> ``"0-2/10"``."""
+    match = _SIZE.search(str(text or ""))
+    return f"{match.group(1).replace(' ', '')}/10" if match else None
+
+
+def _plan_lines(key: str, sniper: Dict[str, Any], strategy: Dict[str, Any], price: Optional[float],
+                stop: Optional[float], target: Optional[float]) -> List[str]:
+    """The trade-plan lines, worded by the verdict so a WAIT never reads like an order."""
+    size = position_size(strategy.get("suggested_position"))
+    stop_text = _fmt_price(stop) if stop is not None else None
+    target_text = _fmt_price(target) if target is not None else None
+    if key in ("buy", "add"):
+        zone = price_zone(sniper.get("ideal_buy"), price) or price_zone(sniper.get("secondary_buy"), price)
+        verb = "Add" if key == "add" else "Buy"
+        plan = f"💵 {verb} near {zone}" if zone else f"💵 {verb} (no entry price given)"
+        plan += f" · size {size}" if size else ""
+        levels = [f"🛑 stop {stop_text}" if stop_text else "", f"🎯 target {target_text}" if target_text else ""]
+    elif key in ("reduce", "sell", "avoid"):
+        plan = {"reduce": f"📉 Trim to {size}" if size else "📉 Trim the position",
+                "sell": "📉 Exit the position",
+                "avoid": "📉 Avoid new buys"}[key]
+        levels = [f"🛑 exit below {stop_text}" if stop_text else "",
+                  f"🎯 rebound target {target_text}" if target_text and key == "reduce" else ""]
+    else:  # watch / hold / alert
+        zone = price_zone(sniper.get("secondary_buy"), price)
+        plan = "💵 No buy now" + (f" · buy zone {zone} only after confirmation" if zone else "")
+        plan += f" · position {size}" if size else ""
+        levels = [f"🛑 stop {stop_text}" if stop_text else "", f"🎯 target {target_text}" if target_text else ""]
+    lines = [_esc(plan)]
+    joined = " · ".join(part for part in levels if part)
+    if joined:
+        lines.append(_esc(joined))
+    return lines
 
 
 # ------------------------------------------------------------ Chan summary --
@@ -265,17 +322,13 @@ def render_verdict_card(
     verdict = core.get("one_sentence") or getattr(result, "analysis_summary", "")
     stop = price_near(sniper.get("stop_loss"), price) or chan["stop"]
     target = price_near(sniper.get("take_profit"), price)
-    levels = " · ".join(part for part in (
-        f"🛑 stop {_fmt_price(stop)}" if stop is not None else "",
-        f"🎯 target {_fmt_price(target)}" if target is not None else "",
-    ) if part)
+    key = action_key(getattr(result, "action", None), getattr(result, "decision_type", None))
 
     lines = [title, status]
     lines += [f"📐 {_esc(line)}" for line in chan["lines"]]
     if verdict:
         lines.append(f"➡️ {_esc(_clip(verdict, 220))}")
-    if levels:
-        lines.append(levels)
+    lines += _plan_lines(key, sniper, battle.get("position_strategy") or {}, price, stop, target)
 
     why: List[str] = []
     advice = core.get("position_advice") or {}

@@ -118,6 +118,36 @@ def test_forming_points_are_not_called_live():
     assert card["text"].splitlines()[1] == "155.46 (-0.44%, last close)"
 
 
+def test_price_zone_and_position_size():
+    from src.services.verdict_card import position_size, price_zone
+
+    assert price_zone("148.80-150.33 (30M confirmed 1B 30M.1B.2026-11-12 at 148.80)", 155.46) == "148.80–150.33"
+    assert price_zone("No buy point; D.3S.2026-11-13 at 170.00", 155.46) == "170.00"  # dates are not ranges
+    assert price_zone("1-2/10 trial only", 155.46) is None and price_zone("150-151", None) is None
+    assert position_size("Suggested position: 0-2/10 (watch; trial size only)") == "0-2/10"
+    assert position_size("2/10 (holders trim toward 2/10; new money 0/10)") == "2/10"
+    assert position_size("no size given") is None
+
+
+def _plan(action, **battle):
+    sniper = {"ideal_buy": "Buy 349.67-352.05 on the 60M 3B", "secondary_buy": "347.89-349.67 if a daily 3B forms",
+              "stop_loss": "347.59 (60M.3B.2026-11-17 13:30)", "take_profit": "359.37 then 360.83"}
+    dashboard = dict(_result().dashboard, battle_plan={
+        "sniper_points": sniper, "position_strategy": {"suggested_position": "Suggested position: 2/10"}, **battle})
+    lines = render_verdict_card(_result(action=action, dashboard=dashboard), AAPL_SNAPSHOT)["plain"].splitlines()
+    return [line for line in lines if line.startswith(("💵", "📉", "🛑"))]
+
+
+def test_plan_line_is_worded_by_the_verdict():
+    assert _plan("buy") == ["💵 Buy near 349.67–352.05 · size 2/10", "🛑 stop 347.59 · 🎯 target 359.37"]
+    assert _plan("add")[0] == "💵 Add near 349.67–352.05 · size 2/10"
+    assert _plan("watch") == ["💵 No buy now · buy zone 347.89–349.67 only after confirmation · position 2/10",
+                              "🛑 stop 347.59 · 🎯 target 359.37"]
+    assert _plan("reduce") == ["📉 Trim to 2/10", "🛑 exit below 347.59 · 🎯 rebound target 359.37"]
+    assert _plan("sell") == ["📉 Exit the position", "🛑 exit below 347.59"]
+    assert _plan("avoid")[0] == "📉 Avoid new buys"
+
+
 def test_quote_change_pct_falls_back_to_previous_close():
     from src.services.verdict_card import quote_change_pct
 
