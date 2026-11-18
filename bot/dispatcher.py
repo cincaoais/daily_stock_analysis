@@ -382,14 +382,17 @@ You are a stock analysis assistant router.  Given a user's natural-language
 message, determine whether it contains a stock-analysis request.
 
 Return a JSON object (and NOTHING else) with these fields:
-- "intent": one of "analysis", "chat", "none"
+- "intent": one of "analysis", "market", "scan", "chat", "none"
   * "analysis" → the user wants stock analysis / diagnosis / comparison
+  * "market" → the user asks how the overall market or an index did (market review)
+  * "scan" → the user wants index constituents screened for buy points
   * "chat" → the user is asking a general question related to finance
   * "none" → the message is irrelevant or you are unsure
 - "codes": a list of stock codes mentioned (may be empty).
   Format: A-share 6-digit ("600519"), HK with prefix ("hk00700"), US ticker uppercase ("AAPL").
 - "strategy": strategy/technique name if the user specified one, else null.
   e.g. "缠论", "MACD", "趋势跟踪", "chan_theory", etc.
+- "universe": for "scan" only: "sp500", "nasdaq100", or null for both.
 
 Examples:
 User: "帮我分析一下600519和000858"
@@ -399,6 +402,15 @@ User: "用缠论看看AAPL"
 {"intent":"analysis","codes":["AAPL"],"strategy":"缠论"}
 
 User: "今天大盘怎么样"
+{"intent":"market","codes":[],"strategy":null}
+
+User: "how was the S&P 500 today?"
+{"intent":"market","codes":[],"strategy":null}
+
+User: "scan the nasdaq 100 for buy points"
+{"intent":"scan","codes":[],"strategy":null,"universe":"nasdaq100"}
+
+User: "what does a high P/E ratio mean?"
 {"intent":"chat","codes":[],"strategy":null}
 
 User: "明天天气如何"
@@ -427,7 +439,9 @@ User: "analyze TSLA and NVDA using trend strategy"
         r'|分析|看看|查一?下|研究|诊断|怎么样|走势|趋势'
         r'|能买|可以买|涨还是跌|怎么看|能追|建议|目标价'
         r'|支撑|压力|阻力|止损|买点|卖点|技术面|基本面|筹码'
-        r'|(?i:analyz|stock|buy|sell|trend|backtest|strateg)',
+        r'|大盘|行情|指数|扫描'
+        r'|(?i:analyz|stock|buy|sell|trend|backtest|strateg'
+        r'|market|s&p|snp|sp\s?500|spx|nasdaq|dow|index|scan)',
     )
 
     _NL_NAME_CLEANUP_PATTERNS = (
@@ -475,68 +489,17 @@ User: "analyze TSLA and NVDA using trend strategy"
         if not getattr(config, 'agent_nl_routing', False):
             return None
 
-        # Only handle private chat or @mentioned messages to avoid hijacking
-        is_private = message.chat_type.value == "private"
-        if not is_private and not message.mentioned:
-            return None
-
-        # Keep Bot-side Agent entrypoints behind explicit opt-in so NL routing
-        # cannot bypass AGENT_MODE=false.
-        if not getattr(config, 'agent_mode', False):
-            return None
-
-        text = message.content.strip()
-        if not text or len(text) > 500:
-            return None
-
-        # Layer 1: cheap pre-filter — skip obviously irrelevant messages
-        if not self._passes_nl_prefilter(text):
+        text = self._nl_candidate_text(message)
+        if text is None:
             return None
 
         # Layer 2: LLM intent parsing — extract codes, intent, strategy
         parsed = await self._parse_intent_via_llm(text, config)
-        if parsed is None:
+        route = self._route_parsed_intent(parsed, text, config)
+        if route is None:
             return None
-
-        intent = parsed.get("intent", "none")
-        codes = parsed.get("codes") or []
-        strategy = parsed.get("strategy")
-
-        if intent == "none":
-            return None
-
-        if intent == "analysis" and not codes:
-            resolved_code = self._resolve_stock_code_from_text(text)
-            if resolved_code:
-                codes = [resolved_code]
-
-        # "chat" intent → route to /chat with original text
-        if intent == "chat":
-            chat_cmd = self.get_command("chat")
-            if chat_cmd:
-                logger.info("[Dispatcher] NL routing → /chat: %s", text[:60])
-                return await chat_cmd.execute_async(message, [text])
-            return None
-
-        # "analysis" intent → route to /ask
-        if intent == "analysis" and codes:
-            ask_cmd = self.get_command("ask")
-            if not ask_cmd:
-                return None
-
-            # Build args: "code1,code2 [strategy]"
-            code_str = ",".join(codes[:5])  # cap at 5
-            args = [code_str]
-            if strategy:
-                args.append(strategy)
-
-            logger.info(
-                "[Dispatcher] NL routing → /ask %s (strategy=%s, text=%s)",
-                code_str, strategy, text[:60],
-            )
-            return await ask_cmd.execute_async(message, args)
-
-        return None
+        command, args = route
+        return await command.execute_async(message, args)
 
     def _try_nl_routing_sync(self, message: BotMessage) -> Optional[BotResponse]:
         """Synchronous companion to `_try_nl_routing` for legacy call sites."""
@@ -546,60 +509,100 @@ User: "analyze TSLA and NVDA using trend strategy"
         if not getattr(config, 'agent_nl_routing', False):
             return None
 
-        is_private = message.chat_type.value == "private"
-        if not is_private and not message.mentioned:
+        text = self._nl_candidate_text(message)
+        if text is None:
             return None
 
-        if not getattr(config, 'agent_mode', False):
+        parsed = self._parse_intent_via_llm_sync(text, config)
+        route = self._route_parsed_intent(parsed, text, config)
+        if route is None:
+            return None
+        command, args = route
+        return command.execute(message, args)
+
+    def _nl_candidate_text(self, message: BotMessage) -> Optional[str]:
+        """Message text worth an intent-parsing LLM call, or None."""
+        # Only handle private chat or @mentioned messages to avoid hijacking
+        is_private = message.chat_type.value == "private"
+        if not is_private and not message.mentioned:
             return None
 
         text = message.content.strip()
         if not text or len(text) > 500:
             return None
 
+        # Layer 1: cheap pre-filter — skip obviously irrelevant messages
         if not self._passes_nl_prefilter(text):
             return None
+        return text
 
-        parsed = self._parse_intent_via_llm_sync(text, config)
+    def _route_parsed_intent(
+        self, parsed: Optional[dict], text: str, config
+    ) -> Optional[tuple]:
+        """Map a parsed intent to ``(command, args)``, or None.
+
+        ``market`` / ``scan`` run the normal pipelines and need only
+        ``AGENT_NL_ROUTING``. Agent entrypoints (``/chat``, ``/ask``) stay
+        behind ``AGENT_MODE`` so NL routing cannot bypass AGENT_MODE=false;
+        without it a stock request goes to the plain ``/analyze``.
+        """
         if parsed is None:
             return None
-
         intent = parsed.get("intent", "none")
         codes = parsed.get("codes") or []
         strategy = parsed.get("strategy")
+        agent_mode = bool(getattr(config, 'agent_mode', False))
 
-        if intent == "none":
+        if intent in ("market", "scan"):
+            command = self.get_command(intent)
+            if command is None:
+                return None
+            universe = parsed.get("universe")
+            args = [universe] if intent == "scan" and universe in ("sp500", "nasdaq100") else []
+            logger.info("[Dispatcher] NL routing → /%s %s: %s", intent, " ".join(args), text[:60])
+            return command, args
+
+        # "chat" intent → route to /chat with original text
+        if intent == "chat":
+            chat_cmd = self.get_command("chat") if agent_mode else None
+            if chat_cmd:
+                logger.info("[Dispatcher] NL routing → /chat: %s", text[:60])
+                return chat_cmd, [text]
             return None
 
-        if intent == "analysis" and not codes:
+        if intent != "analysis":
+            return None
+
+        if not codes:
             resolved_code = self._resolve_stock_code_from_text(text)
             if resolved_code:
                 codes = [resolved_code]
-
-        if intent == "chat":
-            chat_cmd = self.get_command("chat")
-            if chat_cmd:
-                logger.info("[Dispatcher] NL routing → /chat: %s", text[:60])
-                return chat_cmd.execute(message, [text])
+        if not codes:
             return None
 
-        if intent == "analysis" and codes:
-            ask_cmd = self.get_command("ask")
-            if not ask_cmd:
+        if not agent_mode:
+            analyze_cmd = self.get_command("analyze")
+            if not analyze_cmd:
                 return None
+            logger.info("[Dispatcher] NL routing → /analyze %s: %s", codes[0], text[:60])
+            return analyze_cmd, [str(codes[0])]
 
-            code_str = ",".join(codes[:5])
-            args = [code_str]
-            if strategy:
-                args.append(strategy)
+        # "analysis" intent → route to /ask
+        ask_cmd = self.get_command("ask")
+        if not ask_cmd:
+            return None
 
-            logger.info(
-                "[Dispatcher] NL routing → /ask %s (strategy=%s, text=%s)",
-                code_str, strategy, text[:60],
-            )
-            return ask_cmd.execute(message, args)
+        # Build args: "code1,code2 [strategy]"
+        code_str = ",".join(codes[:5])  # cap at 5
+        args = [code_str]
+        if strategy:
+            args.append(strategy)
 
-        return None
+        logger.info(
+            "[Dispatcher] NL routing → /ask %s (strategy=%s, text=%s)",
+            code_str, strategy, text[:60],
+        )
+        return ask_cmd, args
 
     @staticmethod
     async def _parse_intent_via_llm(text: str, config) -> Optional[dict]:

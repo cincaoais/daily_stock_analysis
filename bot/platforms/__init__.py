@@ -52,6 +52,8 @@ except ImportError:
     FeishuReplyClient = None
     get_feishu_stream_client = lambda: None
     start_feishu_stream_background = lambda: False
+# Telegram long polling (plain requests, no SDK)
+from bot.platforms.telegram_polling import TelegramPollingClient, start_telegram_polling_background
 
 __all__ = [
     'BotPlatform',
@@ -70,4 +72,7 @@ __all__ = [
     'get_feishu_stream_client',
     'start_feishu_stream_background',
     'FEISHU_SDK_AVAILABLE',
+    # Telegram long polling
+    'TelegramPollingClient',
+    'start_telegram_polling_background',
 ]

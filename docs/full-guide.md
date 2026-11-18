@@ -1233,6 +1233,17 @@ FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your_hook_token
 3. 获取 Chat ID（可通过 @userinfobot）
 4. 设置 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_CHAT_ID`
 5. (可选) 如需发送到 Topic，设置 `TELEGRAM_MESSAGE_THREAD_ID` (从 Topic 链接末尾获取)
+6. (可选) 在 Telegram 里发命令或提问：设置 `TELEGRAM_BOT_POLLING_ENABLED=true`，以 `python main.py --serve-only`（或 Docker `server` 服务）启动
+
+**Telegram 接收消息（长轮询）**
+
+- 使用 `getUpdates` 长轮询（`timeout=50`）：Telegram 会挂起请求，有消息立即返回，无需公网 IP、域名或 Webhook；空闲时只有一个打开的连接。
+- 只响应 `TELEGRAM_CHAT_ID` 对应的会话，其他会话一律忽略。
+- 可用命令：`/help`、`/status`、`/analyze AAPL`、`/market`（大盘复盘）、`/scan`（缠论日线扫描 S&P 500 / Nasdaq-100，列出买点）、`/scan full`（扫描后对入选股票做 LLM 分析）、`/scan nasdaq100 10` 等。
+- 自然语言：另设 `AGENT_NL_ROUTING=true` 后，"how was the S&P 500 today?" 会转到 `/market`，"scan the nasdaq 100" 转到 `/scan`，"how is AAPL?" 转到 `/analyze`（开启 `AGENT_MODE` 时转到 Agent `/ask`、`/chat`）。每条自然语言消息会调用一次 LLM 做意图识别。
+- 处理超过 3 秒会先回复 "⏳ Working on it…"；分析、复盘和扫描在后台执行，完成后推送到同一会话。
+- 程序离线时发送的消息由 Telegram 保留最多 24 小时；重启后超过 1 小时的消息只回执、不执行，避免误触发旧的扫描/分析。
+- 同一个 Bot 只能有一个进程拉取消息：本地与 Docker 不要同时开启，否则日志会出现 409 并自动退避重试。
 
 ### 邮件
 

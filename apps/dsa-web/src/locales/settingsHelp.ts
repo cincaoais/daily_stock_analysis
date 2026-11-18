@@ -594,6 +594,20 @@ const settingsHelpZhCN: SettingsHelpMap = {
       '不要把 Stream 模式和群机器人 Webhook 混为一条配置路径。',
     ],
   },
+  'settings.notification.TELEGRAM_BOT_POLLING_ENABLED': {
+    title: 'Telegram 机器人长轮询',
+    summary: '用 getUpdates 长轮询接收 Telegram 消息，无需公网 IP 或 Webhook，即可在 Telegram 里发命令或提问。',
+    usage: '先配置 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID，并以 --serve 或 --serve-only 启动。',
+    valueNotes: [
+      'true：后台长轮询，仅响应 TELEGRAM_CHAT_ID 对应会话。',
+      'false：只推送通知，不接收消息。',
+    ],
+    impact: [
+      '可用 /scan、/market、/analyze 等命令；开启 AGENT_NL_ROUTING 后可直接用自然语言提问。',
+      '同一个 Bot 只能有一个进程在拉取消息（本地与 Docker 不要同时开启）。',
+    ],
+    notes: ['保存后需要重启服务进程。', '超过 1 小时的离线消息只回执、不执行。'],
+  },
   'settings.notification.DINGTALK_WEBHOOK_URL': {
     title: '钉钉群机器人 Webhook',
     summary: '通过普通钉钉群机器人 Webhook 推送通知，与 App/Stream 模式相互独立。',
@@ -1888,6 +1902,20 @@ const settingsHelpEnUS: SettingsHelpMap = {
       'Restart the relevant bot/service process after saving; existing long connections are not rebuilt automatically.',
       'Do not treat Stream mode and group bot Webhook as the same delivery path.',
     ],
+  },
+  'settings.notification.TELEGRAM_BOT_POLLING_ENABLED': {
+    title: 'Telegram Bot Polling',
+    summary: 'Receives Telegram messages by getUpdates long polling, so you can send commands or questions from Telegram without a public IP or webhook.',
+    usage: 'Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, then start with --serve or --serve-only.',
+    valueNotes: [
+      'true polls in the background and answers only the TELEGRAM_CHAT_ID chat.',
+      'false keeps Telegram as a notification channel only.',
+    ],
+    impact: [
+      'Enables /scan, /market, /analyze and the other bot commands; with AGENT_NL_ROUTING=true plain questions are routed too.',
+      'Only one process may poll a bot at a time (do not enable it locally and in Docker together).',
+    ],
+    notes: ['Restart the service after saving.', 'Messages older than 1 hour (sent while offline) are acknowledged, not executed.'],
   },
   'settings.notification.DINGTALK_WEBHOOK_URL': {
     title: 'DingTalk Group Bot Webhook',

@@ -2424,6 +2424,32 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {},
         "display_order": 19,
     },
+    "TELEGRAM_BOT_POLLING_ENABLED": {
+        "title": "Telegram Bot Polling",
+        "description": "Receive Telegram messages by long polling (getUpdates) so the bot answers commands and questions without a public IP or webhook. Only TELEGRAM_CHAT_ID is served; runs with --serve / --serve-only.",
+        "category": "notification",
+        "data_type": "boolean",
+        "ui_control": "switch",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "false",
+        "options": [],
+        "validation": {},
+        "display_order": 20,
+        "help_key": "settings.notification.TELEGRAM_BOT_POLLING_ENABLED",
+        "examples": [
+            "TELEGRAM_BOT_POLLING_ENABLED=true",
+            "AGENT_NL_ROUTING=true",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：Telegram",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
+            },
+        ],
+        "warning_codes": ["restart_required"],
+    },
     # ------------------------------------------------------------------
     # Notification – Email
     # ------------------------------------------------------------------

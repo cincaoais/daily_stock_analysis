@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] Telegram 长轮询接收消息（`TELEGRAM_BOT_POLLING_ENABLED`，无需公网 IP / Webhook，仅响应 `TELEGRAM_CHAT_ID`），新增 `/scan` 缠论扫描命令，自然语言路由新增 market / scan 意图（无需 Agent 模式，未开 Agent 时个股请求转 `/analyze`）
 - [新功能] `--scan` 每次运行都会回看此前的扫描记录：每个买卖点按首次出现计一次，统计其后 5/10/20 根日线的收益、相对 SPY 的超额与触发失效价比例，按“已送 LLM / 超出上限 / 笔未完成 / 卖点”分组写入扫描报告与 JSON；复用本次已下载的日线，只额外下载 SPY。
 - [新功能] `--scan ... --schedule` 按 `SCHEDULE_TIME` 每日定时扫描并分析入选股票，美股非交易日跳过（`--force-run` 可强制）；`SCHEDULE_ENABLED=true` 不会把一次性 `--scan` 变成常驻进程。
 - [改进] 提供缠论结构快照时，提示词中的均线趋势分析改为“辅助指标”表（均线状态、排列、乖离、量能），不再给出旧均线策略的“系统信号 / 系统评分 / 买入理由”，避免与缠论结论形成第二套判断；无可用缠论快照时保持原样。

@@ -1675,6 +1675,15 @@ def start_bot_stream_clients(config: Config) -> None:
         except Exception as exc:
             logger.error(f"[Main] Failed to start Feishu Stream client: {exc}")
 
+    # Telegram 长轮询（getUpdates，无需公网 IP / Webhook）
+    if getattr(config, 'telegram_bot_polling_enabled', False):
+        try:
+            from bot.platforms.telegram_polling import start_telegram_polling_background
+            if start_telegram_polling_background(config):
+                logger.info("[Main] Telegram polling client started in background.")
+        except Exception as exc:
+            logger.error(f"[Main] Failed to start Telegram polling client: {exc}")
+
 
 def _resolve_scheduled_stock_codes(stock_codes: Optional[List[str]]) -> Optional[List[str]]:
     """Scheduled runs should always read the latest persisted watchlist."""

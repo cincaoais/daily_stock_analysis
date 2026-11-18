@@ -1460,6 +1460,7 @@ class Config:
     
     # Telegram 机器人 - 已有 telegram_bot_token, telegram_chat_id
     telegram_webhook_secret: Optional[str] = None   # Webhook 密钥
+    telegram_bot_polling_enabled: bool = False  # 长轮询接收消息（无需公网 IP），仅响应 TELEGRAM_CHAT_ID
 
     # === 配置校验模式 ===
     # CONFIG_VALIDATE_MODE=warn (default): log all issues but always continue startup
@@ -2426,6 +2427,7 @@ class Config:
             wecom_agent_id=os.getenv('WECOM_AGENT_ID'),
             # Telegram
             telegram_webhook_secret=os.getenv('TELEGRAM_WEBHOOK_SECRET'),
+            telegram_bot_polling_enabled=os.getenv('TELEGRAM_BOT_POLLING_ENABLED', 'false').lower() == 'true',
             # Discord 机器人扩展配置
             discord_bot_status=os.getenv('DISCORD_BOT_STATUS', 'A股智能分析 | /help'),
             # 实时行情增强数据配置

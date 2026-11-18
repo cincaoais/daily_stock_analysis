@@ -6,6 +6,7 @@
 #   定时模式: docker-compose -f ./docker/docker-compose.yml up -d
 #   FastAPI模式: docker-compose -f ./docker/docker-compose.yml up -d server
 #   同时启动: docker-compose -f ./docker/docker-compose.yml up -d analyzer server
+#   Telegram 机器人: .env 设 TELEGRAM_BOT_POLLING_ENABLED=true 后启动 server（只在一个进程里开启）
 
 name: daily-stock-analysis
 version: '3.8'
@@ -39,9 +40,16 @@ x-common: &common
     - WEBUI_HOST=0.0.0.0
     # API_PORT 从 .env 文件读取，无需在此硬编码
 
+    # moomoo/Futu OpenD 运行在宿主机：容器内 127.0.0.1 指向容器自身，改用 host.docker.internal。
+    # OpenD 的监听地址需设为 0.0.0.0（默认 127.0.0.1 时容器连不上）。
+    - FUTU_OPEND_HOST=${FUTU_OPEND_DOCKER_HOST:-host.docker.internal}
+
     # 代理设置（如果需要）
     # - http_proxy=http://host.docker.internal:10809
     # - https_proxy=http://host.docker.internal:10809
+  # Linux 下让 host.docker.internal 指向宿主机（Docker Desktop 已内置）
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   logging:
     driver: "json-file"
     options:
