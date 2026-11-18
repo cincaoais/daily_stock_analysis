@@ -107,13 +107,24 @@ def test_forming_points_are_not_called_live():
     # NVDA on 2026-11-18: daily 3S forming (valid, not confirmed), 60m 3S confirmed.
     nvda = _snapshot([_point("2B", "buy", "2026-07-29", 189.59, "invalidated", False, 78),
                       _point("3S", "sell", "2026-11-13", 208.30, "forming", True, 2)],
-                     [_point("3S", "sell", "2026-11-11 14:30", 213.32, "confirmed", True, 30)])
+                     [_point("3S", "sell", "2026-11-11 14:30", 213.32, "confirmed", True, 30),
+                      _point("3S", "sell", "2026-11-17 16:00", 165.89, "forming", True, 0)])
     summary = chan_summary(nvda, 155.46)
     assert summary["setup"] == "sell_forming" and summary["stop"] is None
     assert summary["lines"] == ["Daily: 3S forming (2 bars ago) · invalid above 208.30 · weekly up",
                                 "60m: 3S confirmed (30 bars ago) · invalid above 213.32"]
-    card = render_quick_card("NVDA", nvda, price=155.46)
+    card = render_quick_card("NVDA", nvda, price=155.46, change_pct=-0.4355, last_close=True)
     assert "🟠 <b>NVDA</b>" in card["text"] and "Chan sell signal forming — avoid new buys for now" in card["text"]
+    assert card["text"].splitlines()[1] == "155.46 (-0.44%, last close)"
+
+
+def test_quote_change_pct_falls_back_to_previous_close():
+    from src.services.verdict_card import quote_change_pct
+
+    assert quote_change_pct(155.46, 1.5, 156.14, -0.68) == 1.5  # provider value wins
+    assert round(quote_change_pct(155.46, None, 156.14, -0.68), 2) == -0.44  # pre-market NVDA
+    assert round(quote_change_pct(155.46, None, None, -0.68), 2) == -0.44
+    assert quote_change_pct(None, None, 156.14, None) is None
 
     forming_buy = _snapshot([_point("1B", "buy", "2026-11-17", 300.0, "forming", True, 1)])
     assert chan_summary(forming_buy, 351.0)["setup"] == "buy_forming"

@@ -182,8 +182,11 @@ def chan_summary(snapshot: Optional[Dict[str, Any]], price: Optional[float] = No
     conf_level = levels.get(confirmation) if confirmation else None
     if isinstance(conf_level, dict):
         conf_valid = _valid_points(conf_level, price)
-        if conf_valid:
-            lines.append(f"{_LEVEL_NAMES.get(confirmation, confirmation)}: {_point_text(conf_valid[-1])}")
+        # A confirmed/candidate point says more than a newer one that is still forming.
+        conf_live = [p for p in conf_valid if str(p.get("state")) in _LIVE_STATES]
+        shown = (conf_live or conf_valid)[-1:] if conf_valid else []
+        if shown:
+            lines.append(f"{_LEVEL_NAMES.get(confirmation, confirmation)}: {_point_text(shown[0])}")
 
     dir_level = levels.get(direction) if direction else None
     if isinstance(dir_level, dict) and dir_level.get("trend_type"):
@@ -308,8 +311,12 @@ def render_quick_card(
     price: Optional[float] = None,
     change_pct: Optional[float] = None,
     name: str = "",
+    last_close: bool = False,
 ) -> Dict[str, Any]:
-    """Instant card from Chan + quote only; the LLM verdict follows."""
+    """Instant card from Chan + quote only; the LLM verdict follows.
+
+    ``last_close`` marks a stale quote (market not open yet), shown as "last close".
+    """
     code = str(code or "").upper()
     if price is None and isinstance(chan_snapshot, dict):
         roles = chan_snapshot.get("level_roles") or {}
@@ -326,8 +333,11 @@ def render_quick_card(
     }[chan["setup"]]
     title = f"{setup_text[0]} <b>{_esc(code)}</b>" + (f" {_esc(_clip(name, 24))}" if name else "")
     status = _fmt_price(price) if price is not None else "price n/a"
-    if change_pct is not None:
-        status += f" ({change_pct:+.2f}%)"
+    notes = [f"{change_pct:+.2f}%"] if change_pct is not None else []
+    if last_close and price is not None:
+        notes.append("last close")
+    if notes:
+        status += f" ({', '.join(notes)})"
     lines = [title, status, *[f"📐 {_esc(line)}" for line in chan["lines"]], f"➡️ {setup_text[1]}"]
     if chan["stop"] is not None:
         lines.append(f"🛑 Chan stop {_fmt_price(chan['stop'])}")
@@ -363,15 +373,31 @@ def build_quick_card(code: str) -> Optional[Dict[str, Any]]:
         return None
     price = change = None
     name = ""
+    stale = False
     try:
         quote = manager.get_realtime_quote(code, log_final_failure=False)
     except Exception:  # noqa: BLE001 - the card falls back to the last daily close
         quote = None
     if quote is not None:
         price = _num(getattr(quote, "price", None))
-        change = _num(getattr(quote, "change_pct", None))
+        change = quote_change_pct(price, _num(getattr(quote, "change_pct", None)),
+                                  _num(getattr(quote, "pre_close", None)),
+                                  _num(getattr(quote, "change_amount", None)))
         name = str(getattr(quote, "name", "") or "")
-    return render_quick_card(code, snapshot, price=price, change_pct=change, name=name)
+        stale = bool(getattr(quote, "is_stale", False))
+    return render_quick_card(code, snapshot, price=price, change_pct=change, name=name, last_close=stale)
+
+
+def quote_change_pct(price: Optional[float], change_pct: Optional[float], pre_close: Optional[float],
+                     change_amount: Optional[float]) -> Optional[float]:
+    """Provider % change, else derived from the previous close (pre-market quotes omit it)."""
+    if change_pct is not None:
+        return change_pct
+    if price is not None and pre_close:
+        return (price - pre_close) / pre_close * 100
+    if price is not None and change_amount is not None and price != change_amount:
+        return change_amount / (price - change_amount) * 100
+    return None
 
 
 __all__ = ["render_verdict_card", "render_quick_card", "build_quick_card", "chan_summary", "price_near",
