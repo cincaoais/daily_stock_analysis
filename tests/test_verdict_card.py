@@ -66,7 +66,7 @@ def test_verdict_card_answers_the_three_questions():
     text = card["text"]
     assert text.startswith("🟡 <b>AAPL</b> Apple — <b>WAIT</b> · score 48/100")
     assert "351.91 (-0.25%) · sideways" in text  # change computed from prev_close
-    assert "Daily (consolidation): no valid buy point (last 3B Oct 20 failed) · weekly up" in text
+    assert "Daily: no valid buy point (last 3B Oct 20 failed) · weekly up" in text
     assert "60m: 3B candidate (3 bars ago) · invalid below 347.59" in text
     assert "&lt;for&gt;" in text and "&amp; turn" in text  # LLM text is escaped
     assert "🛑 stop 347.59 · 🎯 target 359.37" in text  # sizes like 1-2/10 are skipped
@@ -95,12 +95,30 @@ def test_index_report_button_keeps_the_file_name_case():
 def test_chan_summary_valid_buy_and_sell_and_price_guard():
     buy = _snapshot([_point("2B", "buy", "2026-11-14", 340.0, bars=3)])
     assert chan_summary(buy, 351.0) == {
-        "lines": ["Daily (consolidation): 2B confirmed (3 bars ago) · invalid below 340.00 · weekly up"],
+        "lines": ["Daily: 2B confirmed (3 bars ago) · invalid below 340.00 · weekly up"],
         "setup": "buy", "stop": 340.0}
     assert chan_summary(buy, 339.0)["setup"] == "none"  # price already below the invalidation
     sell = _snapshot([_point("2B", "buy", "2026-11-10", 340.0), _point("1S", "sell", "2026-11-17", 360.0)])
     assert chan_summary(sell, 351.0)["setup"] == "sell"
     assert chan_summary({"levels": {"D": {"status": "missing"}}}, 1.0)["setup"] == "unknown"
+
+
+def test_forming_points_are_not_called_live():
+    # NVDA on 2026-11-18: daily 3S forming (valid, not confirmed), 60m 3S confirmed.
+    nvda = _snapshot([_point("2B", "buy", "2026-07-29", 189.59, "invalidated", False, 78),
+                      _point("3S", "sell", "2026-11-13", 208.30, "forming", True, 2)],
+                     [_point("3S", "sell", "2026-11-11 14:30", 213.32, "confirmed", True, 30)])
+    summary = chan_summary(nvda, 155.46)
+    assert summary["setup"] == "sell_forming" and summary["stop"] is None
+    assert summary["lines"] == ["Daily: 3S forming (2 bars ago) · invalid above 208.30 · weekly up",
+                                "60m: 3S confirmed (30 bars ago) · invalid above 213.32"]
+    card = render_quick_card("NVDA", nvda, price=155.46)
+    assert "🟠 <b>NVDA</b>" in card["text"] and "Chan sell signal forming — avoid new buys for now" in card["text"]
+
+    forming_buy = _snapshot([_point("1B", "buy", "2026-11-17", 300.0, "forming", True, 1)])
+    assert chan_summary(forming_buy, 351.0)["setup"] == "buy_forming"
+    assert chan_summary(forming_buy, 351.0)["stop"] is None  # no buy stop before the buy gate would accept it
+    assert "Chan buy setup forming, not confirmed — wait" in render_quick_card("X", forming_buy)["text"]
 
 
 def test_price_near_and_action_labels():

@@ -36,6 +36,7 @@ _DECISION_FALLBACK = {"buy": "buy", "sell": "sell", "hold": "watch"}
 _LEVEL_NAMES = {"W": "Weekly", "D": "Daily", "60M": "60m", "30M": "30m", "15M": "15m", "5M": "5m"}
 _PHASE_NAMES = {"premarket": "pre-market", "intraday": "market open", "postmarket": "after close",
                 "closed": "market closed"}
+_LIVE_STATES = {"confirmed", "candidate"}  # same states enforce_chan_buy_gate accepts
 _NUMBER = re.compile(r"(?<![\w.])\d{1,6}(?:,\d{3})*(?:\.\d+)?")
 _MAX_CARD_CHARS = 3800  # Telegram limit is 4096; keep a margin
 
@@ -144,7 +145,9 @@ def _valid_points(level: Dict[str, Any], price: Optional[float]) -> List[Dict[st
 def chan_summary(snapshot: Optional[Dict[str, Any]], price: Optional[float] = None) -> Dict[str, Any]:
     """Operating/confirmation-level reading of a Chan snapshot.
 
-    Returns ``{"lines": [...], "setup": "buy"|"sell"|"none"|"unknown", "stop": float|None}``.
+    Returns ``{"lines": [...], "setup": ..., "stop": float|None}`` where setup is
+    ``buy``/``sell`` (confirmed or candidate point, the states the buy gate accepts),
+    ``buy_forming``/``sell_forming`` (not confirmed yet), ``none`` or ``unknown``.
     """
     if not isinstance(snapshot, dict) or not isinstance(snapshot.get("levels"), dict):
         return {"lines": ["Chan: not available"], "setup": "unknown", "stop": None}
@@ -160,13 +163,13 @@ def chan_summary(snapshot: Optional[Dict[str, Any]], price: Optional[float] = No
     if not isinstance(op_level, dict) or op_level.get("status") not in (None, "available", "partial"):
         return {"lines": ["Chan: not enough data"], "setup": "unknown", "stop": None}
 
-    name = _LEVEL_NAMES.get(operating, operating)
-    trend = op_level.get("trend_type")
-    head = f"{name}" + (f" ({trend})" if trend else "")
+    head = _LEVEL_NAMES.get(operating, operating)  # the engine trend label reads as a contradiction here
     valid = _valid_points(op_level, price)
     if valid:
         latest = valid[-1]
-        setup = "buy" if latest.get("side") == "buy" else "sell"
+        side = "buy" if latest.get("side") == "buy" else "sell"
+        live = str(latest.get("state")) in _LIVE_STATES
+        setup = side if live else f"{side}_forming"
         if setup == "buy":
             stop = _num(latest.get("invalidation_price"))
         lines.append(f"{head}: {_point_text(latest)}")
@@ -178,7 +181,7 @@ def chan_summary(snapshot: Optional[Dict[str, Any]], price: Optional[float] = No
 
     conf_level = levels.get(confirmation) if confirmation else None
     if isinstance(conf_level, dict):
-        conf_valid = [p for p in _valid_points(conf_level, price) if p.get("side") == "buy"]
+        conf_valid = _valid_points(conf_level, price)
         if conf_valid:
             lines.append(f"{_LEVEL_NAMES.get(confirmation, confirmation)}: {_point_text(conf_valid[-1])}")
 
@@ -315,7 +318,9 @@ def render_quick_card(
     chan = chan_summary(chan_snapshot, price)
     setup_text = {
         "buy": ("🟢", "Chan buy setup is live"),
+        "buy_forming": ("🟡", "Chan buy setup forming, not confirmed — wait"),
         "sell": ("🔴", "Chan sell signal is live — avoid new buys"),
+        "sell_forming": ("🟠", "Chan sell signal forming — avoid new buys for now"),
         "none": ("🟡", "No Chan buy setup — wait"),
         "unknown": ("⚪", "Chan reading unavailable"),
     }[chan["setup"]]

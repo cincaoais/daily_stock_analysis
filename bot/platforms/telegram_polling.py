@@ -328,6 +328,7 @@ class TelegramPollingClient:
             payload["reply_markup"] = card["reply_markup"]
         try:
             self._call("sendMessage", payload, timeout=15)
+            logger.info("[Telegram Polling] 已发送快速缠论卡片")
             return True
         except TelegramApiError as exc:
             if exc.status != 400 or not card.get("plain"):
