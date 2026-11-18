@@ -9,10 +9,12 @@ Replies go out through the existing ``TelegramSender`` (Markdown + 4096 split).
 """
 
 import logging
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import requests
@@ -46,7 +48,10 @@ _ANALYZE_TAPS = {"/analyze", "/a", "/analyze full", "/a full"}
 _SCAN_TAPS = {"/scan"}
 _MAX_PICKER_STOCKS = 20
 _SCAN_FULL_PICKS = 5  # "full" runs one LLM analysis per pick
-_CALLBACK_PREFIXES = ("/analyze ", "/scan ")
+_CALLBACK_PREFIXES = ("/analyze ", "/scan ", "/report ")
+_REPORT_CALLBACK = re.compile(r"^/report ([A-Za-z0-9._-]{1,24}) (\d{8})$")
+_ANALYZE_WORDS = {"/analyze", "/a"}
+REPORTS_DIR = Path(__file__).resolve().parents[2] / "reports"
 _SCAN_CHOICES = (("S&P 500", "sp500"), ("Nasdaq-100", "nasdaq100"), ("Both", "sp500,nasdaq100"))
 
 
@@ -66,6 +71,8 @@ class TelegramPollingClient:
         sleep: Callable[[float], None] = time.sleep,
         menu: Optional[List[Dict[str, str]]] = None,
         watchlist: Optional[Callable[[], List[str]]] = None,
+        quick_card: Optional[Callable[[str], Optional[Dict[str, Any]]]] = None,
+        reports_dir: Optional[Path] = None,
     ):
         if not bot_token or not allowed_chat_id:
             raise ValueError("Telegram polling needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
@@ -84,6 +91,8 @@ class TelegramPollingClient:
         self._bot_username = ""
         self._menu = menu
         self._watchlist = watchlist or _default_watchlist
+        self._quick_card = quick_card or _default_quick_card
+        self._reports_dir = Path(reports_dir) if reports_dir else REPORTS_DIR
 
     # ---------------------------------------------------------------- API --
     def _call(self, method: str, payload: Dict[str, Any], timeout: float) -> Dict[str, Any]:
@@ -267,12 +276,17 @@ class TelegramPollingClient:
     def _handle(self, message: BotMessage) -> None:
         callback_id = (message.raw_data or {}).get("callback_query_id")
         if callback_id:
-            self._answer_callback(callback_id, f"Running {message.content}…")
+            toast = ("Opening the full report…" if message.content.startswith("/report ")
+                     else f"Running {message.content}…")
+            self._answer_callback(callback_id, toast)
         else:
             picker = self._picker_for(message.content)
             if picker is not None:
                 self._send_picker(message.chat_id, picker)
                 return
+        if message.content.startswith("/report "):
+            self._send_saved_report(message.chat_id, message.content)
+            return
         self._send_typing(message.chat_id)
         notice = threading.Timer(WORKING_NOTICE_DELAY_SEC, self._safe_reply,
                                  args=(message.chat_id, "⏳ Working on it…"))
@@ -286,8 +300,70 @@ class TelegramPollingClient:
         finally:
             notice.cancel()
         text = (getattr(response, "text", "") or "").strip()
+        if self._send_quick_card(message, response):
+            return  # the quick card replaces the "analysis submitted" notice
         if text:
             self._safe_reply(message.chat_id, text)
+
+    # ------------------------------------------------------- verdict cards --
+    def _send_quick_card(self, message: BotMessage, response: Any) -> bool:
+        """After an accepted /analyze, send the instant Chan card (no LLM)."""
+        words = message.content.split()
+        if not words or words[0].lower() not in _ANALYZE_WORDS:
+            return False
+        code = str((getattr(response, "extra", None) or {}).get("stock_code") or "").strip()
+        if not code:
+            return False  # rejected request: the error text is the reply
+        try:
+            card = self._quick_card(code)
+        except Exception as exc:  # noqa: BLE001 - the plain notice still goes out
+            logger.warning("[Telegram Polling] 快速缠论卡片失败 %s: %s", code, exc)
+            return False
+        return bool(card) and self._send_card(message.chat_id, card)
+
+    def _send_card(self, chat_id: str, card: Dict[str, Any]) -> bool:
+        payload: Dict[str, Any] = {"chat_id": chat_id, "text": card["text"], "parse_mode": "HTML",
+                                   "disable_web_page_preview": True}
+        if card.get("reply_markup"):
+            payload["reply_markup"] = card["reply_markup"]
+        try:
+            self._call("sendMessage", payload, timeout=15)
+            return True
+        except TelegramApiError as exc:
+            if exc.status != 400 or not card.get("plain"):
+                logger.error("[Telegram Polling] 卡片发送失败: %s", exc)
+                return False
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[Telegram Polling] 卡片发送失败: %s", exc)
+            return False
+        plain = {key: value for key, value in payload.items() if key != "parse_mode"}
+        plain["text"] = card["plain"]  # HTML rejected: send the same card as plain text
+        try:
+            self._call("sendMessage", plain, timeout=15)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[Telegram Polling] 卡片纯文本发送失败: %s", exc)
+            return False
+
+    def _send_saved_report(self, chat_id: str, command: str) -> None:
+        """📄 button: resend the report file the analysis saved (no new LLM call)."""
+        match = _REPORT_CALLBACK.match(command.strip())
+        if not match:
+            self._safe_reply(chat_id, "That report link is not valid.")
+            return
+        code, date = match.groups()
+        path = self._reports_dir / f"report_{date}_{code}.md"
+        if not path.is_file():
+            self._safe_reply(chat_id, f"The {code} report from {date} is no longer on disk. "
+                                      f"Tap 🔁 Refresh to run the analysis again.")
+            return
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            logger.error("[Telegram Polling] 读取报告失败 %s: %s", path.name, exc)
+            self._safe_reply(chat_id, "Could not read that report file.")
+            return
+        self._safe_reply(chat_id, text or "That report is empty.")
 
     def _send_typing(self, chat_id: str) -> None:
         try:
@@ -348,6 +424,12 @@ def _default_dispatch(message: BotMessage) -> BotResponse:
     from bot.dispatcher import get_dispatcher
 
     return get_dispatcher().dispatch(message)
+
+
+def _default_quick_card(code: str) -> Optional[Dict[str, Any]]:
+    from src.services.verdict_card import build_quick_card
+
+    return build_quick_card(code)
 
 
 def _default_watchlist() -> List[str]:

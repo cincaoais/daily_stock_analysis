@@ -118,6 +118,71 @@ class TelegramSender:
             logger.debug(traceback.format_exc())
             return False
 
+    def send_telegram_card(
+        self,
+        html_text: str,
+        *,
+        chat_id: Optional[str] = None,
+        reply_markup: Optional[dict] = None,
+        plain_text: Optional[str] = None,
+        timeout_seconds: float = 15,
+    ) -> bool:
+        """Send one short HTML message (verdict card) with optional inline buttons.
+
+        Falls back to ``plain_text`` without ``parse_mode`` when Telegram rejects the HTML.
+        The URL carries the bot token, so it is never logged.
+        """
+        token = self._telegram_config.get("bot_token")
+        target = chat_id if chat_id is not None else self._telegram_config.get("chat_id")
+        if not (token and target):
+            logger.warning("Telegram 配置不完整，跳过卡片推送")
+            return False
+        api_url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": target, "text": html_text, "parse_mode": "HTML",
+                   "disable_web_page_preview": True}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        thread_id = self._telegram_config.get("message_thread_id") if chat_id is None else None
+        if thread_id:
+            payload["message_thread_id"] = thread_id
+
+        for attempt in range(1, 4):
+            try:
+                response = requests.post(api_url, json=payload, timeout=timeout_seconds)
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+                if attempt < 3:
+                    time.sleep(2 ** attempt)
+                    continue
+                logger.error(f"Telegram 卡片发送失败: {exc}")
+                return False
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            if response.status_code == 200 and body.get("ok"):
+                logger.info("Telegram 卡片发送成功")
+                return True
+            if response.status_code == 429 and attempt < 3:
+                time.sleep(self._get_telegram_retry_after_seconds(response, attempt))
+                continue
+            if response.status_code >= 500 and attempt < 3:
+                time.sleep(2 ** attempt)
+                continue
+            description = str(body.get("description") or f"HTTP {response.status_code}")
+            if plain_text and self._should_fallback_to_plain_text(error_desc=description):
+                logger.warning(f"Telegram 卡片 HTML 解析失败（{description}），改发纯文本")
+                fallback = dict(payload, text=plain_text)
+                fallback.pop("parse_mode", None)
+                try:
+                    retry = requests.post(api_url, json=fallback, timeout=timeout_seconds)
+                    return retry.status_code == 200 and bool(retry.json().get("ok"))
+                except (requests.exceptions.RequestException, ValueError) as exc:
+                    logger.error(f"Telegram 卡片纯文本回退失败: {exc}")
+                    return False
+            logger.error(f"Telegram 卡片发送失败: {description}")
+            return False
+        return False
+
     def _send_telegram_message(
         self,
         api_url: str,

@@ -2830,6 +2830,12 @@ class StockAnalysisPipeline:
         )
         if quality.get("status") == "missing":
             return None
+        # Kept for the Telegram verdict card, which is rendered after the analysis.
+        snapshots = getattr(self, "_chan_snapshots", None)
+        if snapshots is None:
+            snapshots = {}
+            self._chan_snapshots = snapshots
+        snapshots[str(code).upper()] = snapshot
         return snapshot
 
     def _augment_historical_with_realtime(
@@ -3754,12 +3760,14 @@ class StockAnalysisPipeline:
                     report_content = self.notifier.generate_single_stock_report(result)
                     logger.info(f"[{stock_code}] 使用精简报告格式")
 
+                saved_report_date: Optional[str] = None
                 save_report = getattr(self.notifier, "save_report_to_file", None)
                 if callable(save_report):
                     try:
                         date_str = datetime.now().strftime('%Y%m%d')
                         filename = f"report_{date_str}_{stock_code}.md"
                         filepath = save_report(report_content, filename=filename)
+                        saved_report_date = date_str
                         logger.info(f"[{stock_code}] 单股报告已保存到本地: {filepath}")
                     except Exception as exc:
                         logger.warning(f"[{stock_code}] 单股报告保存失败: {exc}")
@@ -3793,7 +3801,10 @@ class StockAnalysisPipeline:
                 }
                 if _supports_explicit_keyword(self.notifier.send, "structured_payload"):
                     send_kwargs["structured_payload"] = _share_image_payload(result)
-                sent = self.notifier.send(report_content, **send_kwargs)
+                # Telegram bot requests get a short verdict card; the report stays one tap away.
+                sent = self._try_send_telegram_card(result, stock_code, saved_report_date)
+                if not sent:
+                    sent = self.notifier.send(report_content, **send_kwargs)
                 notification_run = self._build_notification_run_snapshot(
                     channel="report",
                     status="success" if sent else "failed",
@@ -3832,6 +3843,37 @@ class StockAnalysisPipeline:
                     notification_run=notification_run,
                 )
                 logger.error(f"[{stock_code}] 单股推送异常: {e}")
+
+    def _try_send_telegram_card(
+        self,
+        result: AnalysisResult,
+        stock_code: str,
+        report_date: Optional[str],
+    ) -> bool:
+        """Send the verdict card to the Telegram chat that asked; False means use the text report."""
+        message = getattr(self, "source_message", None)
+        if getattr(message, "platform", "") != "telegram":
+            return False
+        extract_chat = getattr(self.notifier, "_extract_telegram_context_chat_id", None)
+        chat_id = extract_chat() if callable(extract_chat) else None
+        if not chat_id:
+            return False
+        try:
+            from src.notification_sender.telegram_sender import TelegramSender
+            from src.services.verdict_card import render_verdict_card
+
+            snapshots = getattr(self, "_chan_snapshots", None) or {}
+            snapshot = snapshots.get(str(stock_code).upper()) or snapshots.get(
+                str(getattr(result, "code", "")).upper())
+            card = render_verdict_card(result, snapshot, report_date=report_date)
+            sent = TelegramSender(self.config).send_telegram_card(
+                card["text"], chat_id=chat_id, reply_markup=card.get("reply_markup"), plain_text=card["plain"])
+        except Exception as exc:  # the text report is the fallback
+            logger.warning(f"[{stock_code}] Telegram 结论卡片失败，改发文字报告: {exc}")
+            return False
+        if sent:
+            logger.info(f"[{stock_code}] 已发送 Telegram 结论卡片")
+        return bool(sent)
 
     def _save_local_report(
         self,

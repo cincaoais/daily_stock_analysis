@@ -1241,6 +1241,7 @@ FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your_hook_token
 - 只响应 `TELEGRAM_CHAT_ID` 对应的会话，其他会话一律忽略。
 - 可用命令：`/help`、`/status`、`/analyze AAPL`、`/market`（大盘复盘）、`/scan`（缠论日线扫描 S&P 500 / Nasdaq-100，列出买点）、`/scan full`（扫描后对入选股票做 LLM 分析）、`/scan nasdaq100 10` 等。
 - 在 "/" 菜单里直接点 `/analyze` 或 `/scan`（不带参数）时，机器人会回复按钮：`/analyze` 列出 `STOCK_LIST` 中的股票（普通 / full），`/scan` 可选 S&P 500 / Nasdaq-100 / 两者（full 按钮对前 5 只做 LLM 分析）。
+- `/analyze` 的结果以“结论卡片”回复：先立即发一张缠论快速卡片（约 2 秒，不调用 LLM：价格、操作级别/确认级别买卖点与失效价），分析完成后再发结论卡片（建议动作与评分、缠论读数、一句话结论、止损/目标，理由折叠在可展开引用里）；点 📄 Full report 发送当次保存的完整报告（不重新分析），点 🔁 Refresh 重新分析。仅影响 Telegram 机器人回复，定时推送与其他渠道不变。
 - 自然语言：另设 `AGENT_NL_ROUTING=true` 后，"how was the S&P 500 today?" 会转到 `/market`，"scan the nasdaq 100" 转到 `/scan`，"how is AAPL?" 转到 `/analyze`（开启 `AGENT_MODE` 时转到 Agent `/ask`、`/chat`）。每条自然语言消息会调用一次 LLM 做意图识别。
 - 处理超过 3 秒会先回复 "⏳ Working on it…"；分析、复盘和扫描在后台执行，完成后推送到同一会话。
 - 程序离线时发送的消息由 Telegram 保留最多 24 小时；重启后超过 1 小时的消息只回执、不执行，避免误触发旧的扫描/分析。
