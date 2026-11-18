@@ -64,7 +64,7 @@ def test_offset_chat_filter_mention_strip_and_reply():
 
     polls = [payload for method, payload, _ in api.calls if method == "getUpdates"]
     assert "offset" not in polls[0] and polls[1]["offset"] == 12  # both updates confirmed, incl. the foreign one
-    assert polls[0]["timeout"] == 50 and polls[0]["allowed_updates"] == ["message"]
+    assert polls[0]["timeout"] == 50 and polls[0]["allowed_updates"] == ["message", "callback_query"]
     assert [m.content for m in dispatched] == ["/help", "/status"]  # chat 999 ignored
     msg = dispatched[0]
     assert msg.platform == "telegram" and msg.chat_id == "42" and msg.chat_type == ChatType.PRIVATE and msg.mentioned
@@ -87,6 +87,66 @@ def test_menu_hides_agent_commands_without_agent_mode():
         registered = {c.name for c in get_dispatcher().list_commands(include_hidden=True)}
     reset_dispatcher()
     assert {name for name, _, _ in tp.MENU_COMMANDS} <= registered
+
+
+def _tap(update_id, data, chat_id=42):
+    return {"update_id": update_id, "callback_query": {
+        "id": f"cb{update_id}", "data": data, "from": {"id": 7, "username": "me"},
+        "message": {"message_id": 99, "chat": {"id": chat_id, "type": "private"}}}}
+
+
+def _sent(api, method):
+    return [payload for m, payload, _ in api.calls if m == method]
+
+
+@pytest.mark.parametrize("text", ["/analyze", "/a", "/analyze full", "/ANALYZE  full"])
+def test_bare_analyze_tap_sends_watchlist_buttons(text):
+    api = _FakeTelegram([[_update(1, text)]])
+    dispatched, replies = [], []
+    client = _client(api, dispatched, replies, watchlist=lambda: ["aapl", "HK00700", "AAPL", " "])
+    client.poll_once()
+    assert dispatched == [] and replies == []
+    keyboard = _sent(api, "sendMessage")[0]["reply_markup"]["inline_keyboard"]
+    assert keyboard == [
+        [{"text": "AAPL", "callback_data": "/analyze AAPL"},
+         {"text": "AAPL · full", "callback_data": "/analyze AAPL full"}],
+        [{"text": "HK00700", "callback_data": "/analyze HK00700"},
+         {"text": "HK00700 · full", "callback_data": "/analyze HK00700 full"}],
+    ]
+
+
+def test_bare_scan_tap_sends_index_buttons_and_args_skip_the_picker():
+    api = _FakeTelegram([[_update(1, "/scan"), _update(2, "/scan sp500"), _update(3, "/analyze NVDA")]])
+    dispatched, replies = [], []
+    client = _client(api, dispatched, replies, watchlist=lambda: ["AAPL"])
+    client.poll_once()
+    assert [m.content for m in dispatched] == ["/scan sp500", "/analyze NVDA"]
+    rows = _sent(api, "sendMessage")[0]["reply_markup"]["inline_keyboard"]
+    assert [b["callback_data"] for b in rows[0]] == ["/scan sp500", "/scan nasdaq100", "/scan sp500,nasdaq100"]
+    assert [b["callback_data"] for b in rows[1]] == [
+        "/scan sp500 full 5", "/scan nasdaq100 full 5", "/scan sp500,nasdaq100 full 5"]
+    assert all(len(b["callback_data"].encode()) <= 64 for row in rows for b in row)  # Telegram limit
+    assert parse_scan_args(rows[1][2]["callback_data"].split()[1:]) == ("sp500,nasdaq100", True, 5)
+
+
+def test_empty_watchlist_explains_how_to_type_a_code():
+    api = _FakeTelegram([[_update(1, "/analyze")]])
+    client = _client(api, [], [], watchlist=lambda: [])
+    client.poll_once()
+    sent = _sent(api, "sendMessage")[0]
+    assert "STOCK_LIST is empty" in sent["text"] and "reply_markup" not in sent
+
+
+def test_button_tap_runs_the_command_and_answers_the_tap():
+    api = _FakeTelegram([[_tap(5, "/analyze NVDA full"), _tap(6, "/scan sp500", chat_id=999),
+                          _tap(7, "/batch")]])
+    dispatched, replies = [], []
+    client = _client(api, dispatched, replies)
+    assert client.poll_once() == 3 and client._offset == 8
+    assert [m.content for m in dispatched] == ["/analyze NVDA full"]  # foreign chat and unknown data dropped
+    assert dispatched[0].chat_id == "42" and dispatched[0].mentioned
+    assert _sent(api, "answerCallbackQuery") == [{"callback_query_id": "cb5", "text": "Running /analyze NVDA full…"}]
+    assert replies == [("42", "done")]
 
 
 def test_old_messages_are_acknowledged_not_executed():

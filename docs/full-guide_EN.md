@@ -1102,6 +1102,7 @@ For a full illustrated troubleshooting guide, see [docs/bot/feishu-bot-config.md
 - Uses `getUpdates` long polling (`timeout=50`): Telegram holds the request open and returns as soon as a message arrives, so no public IP, domain or webhook is needed; when idle it is one open connection.
 - Only the `TELEGRAM_CHAT_ID` chat is answered; every other chat is ignored.
 - Commands: `/help`, `/status`, `/analyze AAPL`, `/market` (market review), `/scan` (Chan daily scan of S&P 500 / Nasdaq-100, lists buy points), `/scan full` (also runs the LLM analysis on the picks), `/scan nasdaq100 10`, and so on.
+- Tapping `/analyze` or `/scan` in the "/" menu (no arguments) gets buttons back: `/analyze` lists the `STOCK_LIST` stocks (short or full), `/scan` offers S&P 500 / Nasdaq-100 / Both (the full buttons run the LLM analysis on the top 5).
 - Plain language: with `AGENT_NL_ROUTING=true`, "how was the S&P 500 today?" goes to `/market`, "scan the nasdaq 100" to `/scan`, and "how is AAPL?" to `/analyze` (to the Agent `/ask` / `/chat` when `AGENT_MODE` is on). Each plain-language message costs one LLM intent call.
 - Jobs taking over 3 seconds get a "⏳ Working on it…" reply first; analysis, market review and scans run in the background and post to the same chat when done.
 - Telegram keeps messages sent while the app is offline for up to 24 hours; after a restart, messages older than 1 hour are acknowledged but not executed, so an old scan or analysis is not triggered by accident.

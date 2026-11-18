@@ -28,9 +28,9 @@ _MAX_BACKOFF_SEC = 60
 
 # (command, menu text, needs AGENT_MODE) shown when typing "/" in Telegram
 MENU_COMMANDS = (
-    ("scan", "Chan buy-point scan of S&P 500 / Nasdaq-100 (add 'full' for LLM analysis)", False),
+    ("scan", "Chan buy-point scan of S&P 500 / Nasdaq-100 (pick the index)", False),
     ("market", "Market review for today", False),
-    ("analyze", "Analyse one stock, e.g. /analyze AAPL", False),
+    ("analyze", "Analyse a stock (pick from your watchlist)", False),
     ("batch", "Analyse the watchlist (STOCK_LIST)", False),
     ("status", "System and channel status", False),
     ("help", "List all commands", False),
@@ -40,6 +40,14 @@ MENU_COMMANDS = (
     ("strategies", "List agent strategies", True),
     ("history", "Agent chat history", True),
 )
+
+# A bare menu tap ("/analyze", "/scan") gets buttons instead, since the "/" menu cannot add arguments.
+_ANALYZE_TAPS = {"/analyze", "/a", "/analyze full", "/a full"}
+_SCAN_TAPS = {"/scan"}
+_MAX_PICKER_STOCKS = 20
+_SCAN_FULL_PICKS = 5  # "full" runs one LLM analysis per pick
+_CALLBACK_PREFIXES = ("/analyze ", "/scan ")
+_SCAN_CHOICES = (("S&P 500", "sp500"), ("Nasdaq-100", "nasdaq100"), ("Both", "sp500,nasdaq100"))
 
 
 class TelegramPollingClient:
@@ -57,6 +65,7 @@ class TelegramPollingClient:
         max_workers: int = 2,
         sleep: Callable[[float], None] = time.sleep,
         menu: Optional[List[Dict[str, str]]] = None,
+        watchlist: Optional[Callable[[], List[str]]] = None,
     ):
         if not bot_token or not allowed_chat_id:
             raise ValueError("Telegram polling needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
@@ -74,6 +83,7 @@ class TelegramPollingClient:
         self._thread: Optional[threading.Thread] = None
         self._bot_username = ""
         self._menu = menu
+        self._watchlist = watchlist or _default_watchlist
 
     # ---------------------------------------------------------------- API --
     def _call(self, method: str, payload: Dict[str, Any], timeout: float) -> Dict[str, Any]:
@@ -112,7 +122,8 @@ class TelegramPollingClient:
 
     def poll_once(self) -> int:
         """One ``getUpdates`` round; returns the number of updates handled."""
-        payload: Dict[str, Any] = {"timeout": self._poll_timeout, "allowed_updates": ["message"]}
+        payload: Dict[str, Any] = {"timeout": self._poll_timeout,
+                                   "allowed_updates": ["message", "callback_query"]}
         if self._offset is not None:
             payload["offset"] = self._offset
         updates = self._call("getUpdates", payload, timeout=self._poll_timeout + 15).get("result") or []
@@ -120,7 +131,10 @@ class TelegramPollingClient:
             update_id = update.get("update_id")
             if isinstance(update_id, int):
                 self._offset = update_id + 1  # confirmed on the next getUpdates call
-            message = self._parse_update(update)
+            if "callback_query" in update:
+                message = self._parse_callback(update["callback_query"])
+            else:
+                message = self._parse_update(update)
             if message is not None:
                 self._workers.submit(self._handle, message)
         return len(updates)
@@ -172,8 +186,93 @@ class TelegramPollingClient:
             head = head[: -len(tag)]
         return f"{head}{sep}{rest}".strip()
 
+    def _parse_callback(self, query: Dict[str, Any]) -> Optional[BotMessage]:
+        """A tapped picker button becomes the command text it carries, e.g. ``/analyze NVDA full``."""
+        msg = query.get("message") or {}
+        chat = msg.get("chat") or {}
+        chat_id = str(chat.get("id", ""))
+        data = str(query.get("data") or "").strip()
+        if chat_id != self._allowed_chat_id:
+            logger.warning("[Telegram Polling] 忽略非授权会话的按钮 chat_id=%s", chat_id)
+            return None
+        if not data.startswith(_CALLBACK_PREFIXES):
+            logger.warning("[Telegram Polling] 忽略未知按钮数据: %s", data[:40])
+            return None
+        sender = query.get("from") or {}
+        return BotMessage(
+            platform="telegram",
+            message_id=str(msg.get("message_id", "")),
+            user_id=str(sender.get("id", "")),
+            user_name=str(sender.get("username") or sender.get("first_name") or ""),
+            chat_id=chat_id,
+            chat_type=ChatType.PRIVATE if chat.get("type") == "private" else ChatType.GROUP,
+            content=data,
+            raw_content=data,
+            mentioned=True,
+            timestamp=datetime.now(),
+            raw_data={"chat_id": chat_id, "message_id": msg.get("message_id"),
+                      "callback_query_id": query.get("id")},
+        )
+
+    # ------------------------------------------------------------ pickers --
+    def _picker_for(self, text: str) -> Optional[Dict[str, Any]]:
+        """Button picker for a bare menu tap, or None to dispatch normally."""
+        key = " ".join(text.lower().split())
+        if key in _ANALYZE_TAPS:
+            return self._analyze_picker()
+        if key in _SCAN_TAPS:
+            return self._scan_picker()
+        return None
+
+    def _analyze_picker(self) -> Dict[str, Any]:
+        try:
+            codes = [str(c).strip().upper() for c in self._watchlist() if str(c).strip()]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[Telegram Polling] 读取 STOCK_LIST 失败: %s", exc)
+            codes = []
+        codes = list(dict.fromkeys(codes))[:_MAX_PICKER_STOCKS]
+        if not codes:
+            return {"text": "Your STOCK_LIST is empty. Type a code instead, e.g. /analyze AAPL "
+                            "(add full for the detailed report)."}
+        rows = [[{"text": code, "callback_data": f"/analyze {code}"},
+                 {"text": f"{code} · full", "callback_data": f"/analyze {code} full"}] for code in codes]
+        return {"text": "Pick a stock (short report, or full for the detailed one).\n"
+                        "Other stock: type /analyze TSLA",
+                "reply_markup": {"inline_keyboard": rows}}
+
+    @staticmethod
+    def _scan_picker() -> Dict[str, Any]:
+        plain = [{"text": label, "callback_data": f"/scan {value}"} for label, value in _SCAN_CHOICES]
+        full = [{"text": f"{label} · full", "callback_data": f"/scan {value} full {_SCAN_FULL_PICKS}"}
+                for label, value in _SCAN_CHOICES]
+        return {"text": "Chan scan: pick the index.\n"
+                        f"Plain lists the top 20 buy points (~1 min, no LLM). "
+                        f"full also runs the LLM analysis on the top {_SCAN_FULL_PICKS}.",
+                "reply_markup": {"inline_keyboard": [plain, full]}}
+
+    def _send_picker(self, chat_id: str, picker: Dict[str, Any]) -> None:
+        try:
+            self._call("sendMessage", {"chat_id": chat_id, **picker}, timeout=15)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[Telegram Polling] 发送按钮失败: %s", exc)
+            self._safe_reply(chat_id, picker["text"])
+
+    def _answer_callback(self, callback_id: Any, text: str) -> None:
+        try:
+            self._call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text[:190]}, timeout=10)
+        except Exception as exc:  # noqa: BLE001 - the toast is cosmetic
+            logger.debug("[Telegram Polling] answerCallbackQuery 失败: %s", exc)
+
     # ----------------------------------------------------------- handling --
     def _handle(self, message: BotMessage) -> None:
+        callback_id = (message.raw_data or {}).get("callback_query_id")
+        if callback_id:
+            self._answer_callback(callback_id, f"Running {message.content}…")
+        else:
+            picker = self._picker_for(message.content)
+            if picker is not None:
+                self._send_picker(message.chat_id, picker)
+                return
         self._send_typing(message.chat_id)
         notice = threading.Timer(WORKING_NOTICE_DELAY_SEC, self._safe_reply,
                                  args=(message.chat_id, "⏳ Working on it…"))
@@ -249,6 +348,14 @@ def _default_dispatch(message: BotMessage) -> BotResponse:
     from bot.dispatcher import get_dispatcher
 
     return get_dispatcher().dispatch(message)
+
+
+def _default_watchlist() -> List[str]:
+    from src.config import get_config
+
+    config = get_config()
+    config.refresh_stock_list()
+    return list(config.stock_list or [])
 
 
 def _default_reply(chat_id: str, text: str) -> bool:
